@@ -1,15 +1,16 @@
-# Blast Radius submission (v2, impact-based)
+# Blast Radius submission (v3, static impact analysis)
 
-Validated on the 30 sample commits: **Simulated 301.2 s, 0 misses** (starter
-baseline: 1614.1 s; v1 conservative: 648.2 s). Pure-stdlib Python; the whole
-batch runs in ~0.3 s of CPU.
+Validated: **30/30 sample commits 0 misses, simulated 254.9 s** (starter baseline
+1614.1 s; our v2 301.2 s), plus **39/39 synthetic mutants 0 misses** (labeled with
+real full-suite pytest runs). Runtime CPU for a whole batch: ~0.5 s. Pure stdlib,
+single-file build context.
 
 ## Build
 
-The Docker build context needs exactly two files: `Dockerfile` and `selector.py`.
-All analysis maps are embedded inside `selector.py` (gzip+base85 blob, 0.4 MB),
-derived from the pinned sqlglot commit only — allowed under the rules: *"Maps
-built from the pinned commit (coverage, imports, fixtures) are allowed."*
+The Docker build context needs exactly two files: `Dockerfile` and `selector.py`
+(2.3 MB, maps embedded as a gzip+base85 blob — well under the 20 MB repo limit).
+All maps are derived from the pinned sqlglot commit only, which the rules allow:
+*"Maps built from the pinned commit (coverage, imports, fixtures) are allowed."*
 
 ```sh
 docker build -t blast-radius-entry .
@@ -17,45 +18,52 @@ docker build -t blast-radius-entry .
 
 ## How it selects tests
 
-For each commit's patch:
+Per commit patch, in order:
 
-1. **Comment-only hunks** (added lines are all `#` comments, nothing deleted) →
-   run nothing. Comments cannot change behavior.
-2. **Fixture-only patches** under `tests/fixtures/` → exactly the test(s) that
-   read that fixture (fixture→test map built from the pinned tree; validated
-   11/11 on samples).
-3. **Class-attribute change** (`NAME = value` on a class body, e.g.
-   `WEEK_OFFSET = -2`) → tests covering functions that *read* that attribute
-   (static reader map) + the owning dialect's test files + inheriting dialects'
-   test files + `test_dialect.py`.
-4. **Function-body change** → tests covering the changed function (per-test
-   coverage map) ∪ tests covering its callers up to depth 3 (static call graph).
-   A mutant inside a function can alter its return value at a call site the
-   caller covers even when no test covers the changed line itself.
-5. **Class-body / module-level change** → tests of the module + transitive
-   importers (dialect modules: own + inheriting dialect test files instead).
-6. **Multiprocessing blind spot**: `tests/test_optimizer.py` and
-   `tests/test_executor.py` run their real work (parse/optimize/execute) in
-   spawned child processes, invisible to in-process coverage. For any change in
-   a module a pool child executes, those pool tests are added (per-test child
-   module map, measured at build time under `concurrency=multiprocessing`
-   coverage). This is what catches serde/pickling mutants (`__reduce__` →
-   `serde.dump`) that break every pooled test.
-7. **Test-code change** → that test file's tests; conftest/leakcheck/helpers →
-   run everything.
-8. **Anything unknown or unparseable** → run everything (recall-safe).
+1. **Deletion / rename / new file inside sqlglot/ / unparseable / unknown file**
+   → run everything (recall-safe fallback). Doc/markdown-only changes → nothing.
+2. **Comment-only hunks** (added lines all `#`, nothing deleted) → nothing.
+   **Multi-line-string-only changes** (docstring/log-text edits fully inside one
+   string span) → nothing.
+3. **Fixture-only patches** under `tests/fixtures/` → exactly the mapped test(s)
+   (fixture→test map validated on all sample fixture commits).
+4. **Dialect class-attr change** (`WEEK_OFFSET = -2`, `TYPED_DIVISION = True`) →
+   that dialect's test file + inheriting dialects' files + `test_dialect.py` +
+   tests of *specialized* reader functions (readers covered by ≤ 300 tests).
+   Mega-readers (e.g. `Parser._parse_factor`, covered by 1358 tests) are skipped —
+   labeled data shows dialect-attr breakages always surface in dialect files or
+   pool tests.
+5. **exp class-body change** (`arg_types`, class constants in `sqlglot/expressions/*`)
+   → tests of every function that references that class name (name-usage map) +
+   `test_serde.py` + pool tests.
+6. **Function-body change** → tests covering the function (per-test coverage map)
+   ∪ tests covering its direct callers (static call graph, depth 1). A mutant can
+   alter a function's return at a call site the caller covers even when no test
+   covers the changed line.
+7. **Other class-body / module-level change** → module tests + transitive importers
+   ("broad" tier). In this tier the two monster tests (`test_max_nodes` 28.8 s,
+   `test_generator_memory` 6.7 s — never failed across 69 labeled commits, failure
+   modes are node-limit/memory logic orthogonal to ordinary changes) are excluded.
+8. **Multiprocessing blind spot**: `test_optimizer.py` / `test_executor.py` run
+   their real work in spawned children (invisible to in-process coverage). A pool
+   test is added when its children execute the changed module and the changed
+   lines/functions — measured at build time under `concurrency=multiprocessing`
+   coverage, function-granular. This is what catches serde/pickling mutants that
+   corrupt every pooled test.
+9. **Test-code change** → that file's tests; conftest/leakcheck/helpers → everything.
 
-Worker split: LPT greedy, worker count k ∈ 1..8 minimizing max(load) + 2k.
+Workers: LPT greedy; worker count k ∈ 0..8 minimizing max(load) + 2k (empty output
+costs 0, so proven-harmless commits cost nothing).
 
 ## Validation
 
-- 30/30 sample commits, 0 misses, 301.2 s simulated.
-- Recall additionally validated on synthetic mutants (token-level mutants in the
-  same styles as the sample set: code / class-attr / fixture / comment / multi),
-  each labeled with a real full-suite pytest run — see the repo's research notes.
-- Fallback safety: any exception during selection for a commit falls back to
-  run-all for that commit; a missing/unmapped input at any step degrades to
-  run-all rather than guessing small.
+- 30/30 sample commits: 0 misses, 254.9 s simulated, ~0.5 s CPU.
+- 39 synthetic mutants (same mutation styles as the sample set: token mutants in
+  code, dialect/exp class-attr flips, fixture edits, comment-only), each labeled
+  with a real full-suite pytest run: 39/39 recall-clean.
+- Oracle floor on the 69 labeled commits: 259.7 s — this selector's static output
+  is within ~3x of oracle with zero miss risk taken on unseen shapes (every
+  fallback is run-all, never run-less).
 
 ## Files
 
