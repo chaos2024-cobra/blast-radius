@@ -1,0 +1,565 @@
+diff --git a/sqlglot/anonymize.py b/sqlglot/anonymize.py
+index 9c232423c..4cbc84450 100644
+--- a/sqlglot/anonymize.py
++++ b/sqlglot/anonymize.py
+@@ -21,6 +21,7 @@ ANONYMIZED_TYPES = {
+     TokenType.RAW_STRING,
+     TokenType.STRING,
+     TokenType.UNICODE_STRING,
++    TokenType.UNICODE_IDENTIFIER,
+     TokenType.VAR,
+ }
+ QUOTED_TYPES = ANONYMIZED_TYPES - {TokenType.NUMBER, TokenType.VAR}
+@@ -152,8 +153,9 @@ def render(sql: str, tokens: list[Token], dialect: DialectType = None) -> str:
+ 
+     result = []
+     prev = 0
++    uescape_alias = ""
+ 
+-    for token in tokens:
++    for i, token in enumerate(tokens):
+         result.append(_redact(sql[prev : token.start], comments, nested))
+         prev = token.end + 1
+         span = sql[token.start : prev]
+@@ -162,6 +164,13 @@ def render(sql: str, tokens: list[Token], dialect: DialectType = None) -> str:
+             result.append(token.text)
+         elif token.token_type in ANONYMIZED_TYPES:
+             result.append(_fit(span, token.text, quotes, token.token_type))
++        elif token.token_type == TokenType.UESCAPE:
++            if token.text.upper() == "UESCAPE":
++                uescape_alias = tokens[i - 1].text
++            elif token.text and token.text in uescape_alias:
++                # Keep the alias literal when it contains the clause's escape character.
++                span = "'!'".ljust(len(span))
++            result.append(span)
+         else:
+             result.append(span)
+ 
+@@ -251,6 +260,8 @@ def _fit(span: str, alias: str, quotes: list[tuple[str, str]], token_type: Token
+                 break
+ 
+     width = len(span) - start - end
++    if token_type == TokenType.IDENTIFIER and end and len(alias) < width:
++        return (span[:start] + alias + span[-end:]).ljust(len(span))
+     pad = "0" if token_type == TokenType.NUMBER else "a"
+ 
+     return span[:start] + alias[:width].rjust(width, pad) + span[len(span) - end :]
+diff --git a/sqlglot/dialects/materialize.py b/sqlglot/dialects/materialize.py
+index da02096bd..78886d5ca 100644
+--- a/sqlglot/dialects/materialize.py
++++ b/sqlglot/dialects/materialize.py
+@@ -11,6 +11,7 @@ class Materialize(Postgres):
+     UNESCAPED_SEQUENCES = {"\\a": "a", "\\v": "v"}
+ 
+     class Tokenizer(Postgres.Tokenizer):
++        UNICODE_IDENTIFIERS = []
+         NUMERIC_ESCAPES = {"u": (16, 4, 4, 0xFFFF), "U": (16, 8, 8, 0x10FFFF)}
+ 
+     Parser = MaterializeParser
+diff --git a/sqlglot/dialects/postgres.py b/sqlglot/dialects/postgres.py
+index f122f47d8..11c221078 100644
+--- a/sqlglot/dialects/postgres.py
++++ b/sqlglot/dialects/postgres.py
+@@ -95,6 +95,7 @@ class Postgres(Dialect):
+         HEX_STRINGS = [("x'", "'"), ("X'", "'")]
+         BYTE_STRINGS = [("e'", "'"), ("E'", "'")]
+         UNICODE_STRINGS = [("U&'", "'"), ("u&'", "'")]
++        UNICODE_IDENTIFIERS = [('U&"', '"'), ('u&"', '"')]
+         BYTE_STRING_ESCAPES = ["'", "\\"]
+         HEREDOC_STRINGS = ["$"]
+ 
+diff --git a/sqlglot/dialects/redshift.py b/sqlglot/dialects/redshift.py
+index 5eca01bff..04e70a69b 100644
+--- a/sqlglot/dialects/redshift.py
++++ b/sqlglot/dialects/redshift.py
+@@ -43,6 +43,7 @@ class Redshift(Postgres):
+         DROP_UNKNOWN_ESCAPES = True
+         BIT_STRINGS = []
+         HEX_STRINGS = []
++        UNICODE_IDENTIFIERS = []
+         STRING_ESCAPES = ["\\", "'"]
+ 
+         KEYWORDS = {
+diff --git a/sqlglot/dialects/risingwave.py b/sqlglot/dialects/risingwave.py
+index f31925951..be843e89f 100644
+--- a/sqlglot/dialects/risingwave.py
++++ b/sqlglot/dialects/risingwave.py
+@@ -15,6 +15,8 @@ class RisingWave(Postgres):
+     UNESCAPED_SEQUENCES = {"\\a": "a", "\\v": "v"}
+ 
+     class Tokenizer(Postgres.Tokenizer):
++        UNICODE_IDENTIFIERS = []
++
+         KEYWORDS = {
+             **Postgres.Tokenizer.KEYWORDS,
+             "SINK": TokenType.SINK,
+diff --git a/sqlglot/generators/duckdb.py b/sqlglot/generators/duckdb.py
+index e8b5ef9cf..c9ecf8f63 100644
+--- a/sqlglot/generators/duckdb.py
++++ b/sqlglot/generators/duckdb.py
+@@ -41,7 +41,7 @@ from sqlglot.dialects.dialect import (
+     WEEK_START_DAY_TO_DOW,
+ )
+ from sqlglot.generator import unsupported_args
+-from sqlglot.helper import find_new_name, is_date_unit, seq_get
++from sqlglot.helper import decode_unicode_escapes, find_new_name, is_date_unit, seq_get
+ from sqlglot.optimizer.scope import find_all_in_scope
+ from builtins import type as Type
+ 
+@@ -2479,19 +2479,8 @@ class DuckDBGenerator(generator.Generator):
+         # are decoded into the characters, e.g. U&'d\0061t\0061' and U&'d!+000061ta' UESCAPE '!'
+         # are both 'data'
+         escape = expression.args.get("escape")
+-        escape_char = re.escape(escape.name if isinstance(escape, exp.Expr) else "\\")
+-        pattern = re.compile(
+-            rf"{escape_char}(?:\+([0-9a-fA-F]{{6}})|([0-9a-fA-F]{{4}})|({escape_char}))"
+-        )
+-
+-        def decode(match: re.Match[str]) -> str:
+-            if match.group(3):
+-                return match.group(3)
+-            return chr(int(match.group(1) or match.group(2), 16))
+-
+-        # A character outside the BMP can be written as a UTF-16 surrogate pair
+-        text = (
+-            pattern.sub(decode, expression.name).encode("utf-16", "surrogatepass").decode("utf-16")
++        text = decode_unicode_escapes(
++            expression.name, escape.name if isinstance(escape, exp.Expr) else "\\"
+         )
+         return self.sql(exp.Literal.string(text))
+ 
+diff --git a/sqlglot/helper.py b/sqlglot/helper.py
+index 3976bde29..ecfd0c37a 100644
+--- a/sqlglot/helper.py
++++ b/sqlglot/helper.py
+@@ -162,6 +162,24 @@ def camel_to_snake_case(name: str) -> str:
+     return CAMEL_CASE_PATTERN.sub("_", name).upper()
+ 
+ 
++def decode_unicode_escapes(text: str, escape: str, *, strict: bool = False) -> str:
++    """Decode SQL Unicode escapes, including doubled escape characters and UTF-16 pairs."""
++    prefix = re.escape(escape)
++    pattern = rf"{prefix}(?:\+([0-9a-fA-F]{{6}})|([0-9a-fA-F]{{4}})|({prefix}))"
++    if strict:
++        pattern += "?"  # Also match a bare escape so that decode can reject it.
++
++    def decode(match: re.Match[str]) -> str:
++        digits = match[1] or match[2]
++        if digits:
++            return chr(int(digits, 16))
++        if strict and match[3] is None:
++            raise ValueError("Invalid Unicode escape")
++        return escape
++
++    return re.sub(pattern, decode, text).encode("utf-16", "surrogatepass").decode("utf-16")
++
++
+ def while_changing(expression: E, func: t.Callable[[E], E]) -> E:
+     """
+     Applies a transformation to a given expression until a fix point is reached.
+diff --git a/sqlglot/parser.py b/sqlglot/parser.py
+index e220312bf..94fd1f883 100644
+--- a/sqlglot/parser.py
++++ b/sqlglot/parser.py
+@@ -2345,13 +2345,31 @@ class Parser:
+         total = len(raw_tokens)
+         chunks: list[list[Token]] = [[]]
+ 
+-        for i, token in enumerate(raw_tokens):
++        indexed_tokens = enumerate(raw_tokens)
++        for i, token in indexed_tokens:
+             if token.token_type == TokenType.SEMICOLON:
+                 if token.comments:
+                     chunks.append([token])
+ 
+                 if i < total - 1:
+                     chunks.append([])
++            elif token.token_type == TokenType.UESCAPE and chunks[-1]:
++                # The lexer keeps the clause's source spans for rendering. The parser needs
++                # one identifier covering the full clause, including its comments.
++                identifier = chunks[-1][-1]
++                comments = identifier.comments + token.comments
++                while i + 1 < total and raw_tokens[i + 1].token_type == TokenType.UESCAPE:
++                    i, token = next(indexed_tokens)
++                    comments.extend(token.comments)
++                chunks[-1][-1] = Token(
++                    TokenType.IDENTIFIER,
++                    identifier.text,
++                    line=token.line,
++                    col=token.col,
++                    start=identifier.start,
++                    end=token.end,
++                    comments=comments,
++                )
+             else:
+                 chunks[-1].append(token)
+ 
+diff --git a/sqlglot/tokenizer_core.py b/sqlglot/tokenizer_core.py
+index d6ae27b53..a3c672e7d 100644
+--- a/sqlglot/tokenizer_core.py
++++ b/sqlglot/tokenizer_core.py
+@@ -1,15 +1,21 @@
+ from __future__ import annotations
+ 
++import re
+ import typing as t
+ from enum import IntEnum, auto
+ 
+ from sqlglot.errors import TokenError
++from sqlglot.helper import decode_unicode_escapes, seq_get
+ 
+ # dict lookup is faster than .upper() and .isdigit()
+ _CHAR_UPPER: dict[str, str] = {chr(i): chr(i).upper() for i in range(97, 123)}
+ _DIGIT_CHARS: frozenset[str] = frozenset("0123456789")
+ _DIGIT_VALUES: dict[str, int] = {c: int(c, 16) for c in "0123456789abcdefABCDEF"}
+ _OCTAL_CHARS: frozenset[str] = frozenset("01234567")
++# PostgreSQL continues a quoted string across a newline, including after a line comment.
++_QUOTE_CONTINUATION = re.compile(
++    r"[ \t\f\v]*(?:--[^\r\n]*)?[\r\n](?:[ \t\f\v\r\n]|--[^\r\n]*[\r\n])*'"
++)
+ 
+ 
+ class TokenType(IntEnum):
+@@ -116,6 +122,8 @@ class TokenType(IntEnum):
+     RAW_STRING = auto()
+     HEREDOC_STRING = auto()
+     UNICODE_STRING = auto()
++    UNICODE_IDENTIFIER = auto()
++    UESCAPE = auto()  # The keyword and literal fragments of a decoded identifier's escape clause
+ 
+     # types
+     BIT = auto()
+@@ -558,6 +566,7 @@ class TokenizerCore:
+         "_end",
+         "_peek",
+         "_prev_token_line",
++        "_has_unicode_identifiers",
+         "single_tokens",
+         "keywords",
+         "quotes",
+@@ -677,6 +686,7 @@ class TokenizerCore:
+         self._end = False
+         self._peek = ""
+         self._prev_token_line = -1
++        self._has_unicode_identifiers = False
+ 
+     def reset(self) -> None:
+         self.sql = ""
+@@ -691,6 +701,7 @@ class TokenizerCore:
+         self._end = False
+         self._peek = ""
+         self._prev_token_line = -1
++        self._has_unicode_identifiers = False
+ 
+     def tokenize(self, sql: str) -> list[Token]:
+         """Returns a list of tokens corresponding to the SQL string `sql`."""
+@@ -705,9 +716,67 @@ class TokenizerCore:
+             end = min(self._current + 50, self.size - 1)
+             context = self.sql[start:end]
+             raise TokenError(f"Error tokenizing '{context}'", start=start, end=end) from e
+-
++        finally:
++            if self._has_unicode_identifiers:
++                self._decode_unicode_identifiers()
+         return self.tokens
+ 
++    def _decode_unicode_identifiers(self) -> None:
++        # UESCAPE follows the identifier and may be separated from it by comments.
++        tokens = self.tokens
++        self.tokens = []
++        for i, token in enumerate(tokens):
++            if token.token_type != TokenType.UNICODE_IDENTIFIER:
++                self.tokens.append(token)
++                continue
++
++            escape = "\\"
++            keyword = seq_get(tokens, i + 1)
++            if (
++                keyword
++                and keyword.token_type == TokenType.VAR
++                and keyword.text.upper() == "UESCAPE"
++            ):
++                literal = seq_get(tokens, i + 2)
++                if not literal or literal.token_type not in (
++                    TokenType.STRING,
++                    TokenType.BYTE_STRING,
++                    TokenType.HEREDOC_STRING,
++                ):
++                    raise TokenError(
++                        "UESCAPE must be followed by a string literal",
++                        start=keyword.start,
++                        end=keyword.end + 1,
++                    )
++                escape = literal.text
++                last = literal
++                j = i + 3
++                while j < len(tokens) and tokens[j].token_type == TokenType.UESCAPE:
++                    last = tokens[j]
++                    escape += last.text
++                    j += 1
++                if (
++                    len(escape) != 1
++                    or not escape.isascii()
++                    or escape in _DIGIT_VALUES
++                    or escape in "+'\" \t\n\r\v\f\0"
++                ):
++                    raise TokenError(
++                        "Invalid Unicode escape character", start=literal.start, end=last.end + 1
++                    )
++                keyword.token_type = literal.token_type = TokenType.UESCAPE
++
++            try:
++                token.text = decode_unicode_escapes(token.text, escape, strict=True)
++                if not token.text or "\0" in token.text:
++                    raise ValueError("Empty or null-containing identifier")
++            except ValueError as e:
++                raise TokenError(
++                    "Invalid Unicode identifier", start=token.start, end=token.end + 1
++                ) from e
++            token.token_type = TokenType.IDENTIFIER
++            self.tokens.append(token)
++
+     def _scan(self, check_semicolon: bool = False) -> None:
+         identifiers = self.identifiers
+         digit_chars = _DIGIT_CHARS
+@@ -1114,13 +1183,19 @@ class TokenizerCore:
+     def _scan_string(self, start: str) -> bool:
+         base = None
+         token_type = TokenType.STRING
++        escapes = self.string_escapes
+ 
+         if start in self.quotes:
+             end = self.quotes[start]
+         elif start in self.format_strings:
+             end, token_type = self.format_strings[start]
+ 
+-            if token_type == TokenType.HEX_STRING:
++            if token_type == TokenType.UNICODE_IDENTIFIER:
++                self._has_unicode_identifiers = True
++                escapes = {end}
++            elif token_type == TokenType.BYTE_STRING:
++                escapes = self.byte_string_escapes
++            elif token_type == TokenType.HEX_STRING:
+                 base = 16
+             elif token_type == TokenType.BIT_STRING:
+                 base = 2
+@@ -1155,11 +1230,7 @@ class TokenizerCore:
+         self._advance(len(start))
+         text = self._extract_string(
+             end,
+-            escapes=(
+-                self.byte_string_escapes
+-                if token_type == TokenType.BYTE_STRING
+-                else self.string_escapes
+-            ),
++            escapes=escapes,
+             raw_string=token_type
+             in (TokenType.RAW_STRING, TokenType.NATIONAL_RAW_STRING, TokenType.HEREDOC_STRING),
+             bytes_literal=token_type == TokenType.BYTE_STRING and self.byte_strings_are_bytes,
+@@ -1174,6 +1245,25 @@ class TokenizerCore:
+                 )
+ 
+         self._add(token_type, text)
++        if (
++            self._has_unicode_identifiers
++            and token_type in (TokenType.STRING, TokenType.BYTE_STRING)
++            and len(self.tokens) >= 3
++            and self.tokens[-3].token_type == TokenType.UNICODE_IDENTIFIER
++            and self.tokens[-2].token_type == TokenType.VAR
++            and self.tokens[-2].text.upper() == "UESCAPE"
++        ):
++            # Bare continuations inherit the first literal's rules, including E-string escapes.
++            while match := _QUOTE_CONTINUATION.match(self.sql, self._current):
++                while self._current < match.end():
++                    self._advance()
++                    if self._char == "-":
++                        self._start = self._current - 1
++                        self._scan_comment("--")
++
++                self._start = self._current - 1
++                self._advance()
++                self._add(TokenType.UESCAPE, self._extract_string("'", escapes=escapes))
+         return True
+ 
+     def _scan_identifier(self, identifier_end: str) -> None:
+diff --git a/sqlglot/tokens.py b/sqlglot/tokens.py
+index de44ea389..df5e09de2 100644
+--- a/sqlglot/tokens.py
++++ b/sqlglot/tokens.py
+@@ -49,6 +49,7 @@ class _TokenizerBase:
+     RAW_STRINGS: t.ClassVar[list[str | tuple[str, str]]]
+     HEREDOC_STRINGS: t.ClassVar[list[str | tuple[str, str]]]
+     UNICODE_STRINGS: t.ClassVar[list[str | tuple[str, str]]]
++    UNICODE_IDENTIFIERS: t.ClassVar[list[str | tuple[str, str]]]
+     STRING_ESCAPES: t.ClassVar[list[str]]
+     BYTE_STRING_ESCAPES: t.ClassVar[list[str]]
+     IDENTIFIER_ESCAPES: t.ClassVar[list[str]]
+@@ -99,6 +100,7 @@ class _TokenizerBase:
+             **_quotes_to_format(TokenType.RAW_STRING, cls.RAW_STRINGS),
+             **_quotes_to_format(TokenType.HEREDOC_STRING, cls.HEREDOC_STRINGS),
+             **_quotes_to_format(TokenType.UNICODE_STRING, cls.UNICODE_STRINGS),
++            **_quotes_to_format(TokenType.UNICODE_IDENTIFIER, cls.UNICODE_IDENTIFIERS),
+         }
+         if not any(
+             "BYTE_STRING_ESCAPES" in k.__dict__ for k in cls.__mro__ if k.__module__ != __name__
+@@ -168,6 +170,7 @@ class Tokenizer(_TokenizerBase):
+     RAW_STRINGS: t.ClassVar[list[str | tuple[str, str]]] = []
+     HEREDOC_STRINGS: t.ClassVar[list[str | tuple[str, str]]] = []
+     UNICODE_STRINGS: t.ClassVar[list[str | tuple[str, str]]] = []
++    UNICODE_IDENTIFIERS: t.ClassVar[list[str | tuple[str, str]]] = []
+     IDENTIFIERS: t.ClassVar[list[str | tuple[str, str]]] = ['"']
+     QUOTES: t.ClassVar[list[tuple[str, str] | str]] = ["'"]
+     STRING_ESCAPES: t.ClassVar[list[str]] = ["'"]
+diff --git a/tests/dialects/test_postgres.py b/tests/dialects/test_postgres.py
+index 8245f2ec2..272b9cc7a 100644
+--- a/tests/dialects/test_postgres.py
++++ b/tests/dialects/test_postgres.py
+@@ -1,4 +1,4 @@
+-from sqlglot import ErrorLevel, ParseError, UnsupportedError, exp, parse_one, transpile
++from sqlglot import ErrorLevel, ParseError, TokenError, UnsupportedError, exp, parse_one, transpile
+ from sqlglot.generator import logger as generator_logger
+ from sqlglot.helper import logger as helper_logger
+ from sqlglot.optimizer import optimize
+@@ -2230,6 +2230,62 @@ FROM json_data, field_ids""",
+             },
+         )
+ 
++    def test_unicode_identifier(self):
++        self.validate_identity(
++            r'SELECT U&"\0062ases" FROM (VALUES (42)) AS t(bases)',
++            'SELECT "bases" FROM (VALUES (42)) AS t(bases)',
++        )
++        self.validate_identity(
++            """WITH u&"T" AS (SELECT 1 AS U&"a""b!!c!+01F600" UESCAPE '!') """
++            r'SELECT "T".U&"a""b!c\D83D\DE00" FROM "T"',
++            'WITH "T" AS (SELECT 1 AS "a""b!c😀") SELECT "T"."a""b!c😀" FROM "T"',
++        )
++        self.validate_identity(
++            r"""SELECT 1 AS U&"a\\b", 2 AS u&"Mixed.0043ase" /* escape */ uescape '.'""",
++            r"""SELECT 1 AS "a\b", 2 AS "MixedCase" /* escape */""",
++        )
++        self.validate_identity(
++            'SELECT u &"bits", u& "bits", mu&"bits" FROM (VALUES (3, 2, 1)) AS t(u, mu, bits)',
++            'SELECT u & "bits", u & "bits", mu & "bits" FROM (VALUES (3, 2, 1)) AS t(u, mu, bits)',
++        )
++        for identifier in (
++            r'U&"\123"',
++            r'U&"\+110000"',
++            r'U&"\D800"',
++            r'U&"\0000"',
++            """U&"x" UESCAPE '+'""",
++            """U&"x" UESCAPE 'ab'""",
++            'U&"x" UESCAPE',
++        ):
++            with self.subTest(identifier=identifier), self.assertRaises(TokenError):
++                self.parse_one(f"SELECT 1 AS {identifier}")
++
++    def test_unicode_identifier_continued_uescape(self):
++        prefix = 'SELECT 1 AS U&"x!0061" UESCAPE '
++        for literal in ("''\n'!'", "'!'\r\n''", "E''\n''\n'\\x21'"):
++            with self.subTest(literal=literal):
++                self.validate_identity(prefix + literal, 'SELECT 1 AS "xa"')
++
++        sql = prefix + "'' -- first\n'!' -- last\n''"
++        projection = self.parse_one(sql).selects[0]
++        alias = projection.args["alias"]
++        self.assertEqual(alias.name, "xa")
++        self.assertEqual(projection.comments, [" first", " last"])
++        self.assertEqual(
++            sql[alias.meta["start"] : alias.meta["end"] + 1], sql[len("SELECT 1 AS ") :]
++        )
++
++        for literal in (
++            "'!'\n'?'",
++            "''\n''",
++            "'' '!'",
++            "'' /* gap */\n'!'",
++            "$$$$\n'!'",
++            "''\nE'!'",
++        ):
++            with self.subTest(literal=literal), self.assertRaises(TokenError):
++                self.parse_one(prefix + literal)
++
+     def test_unicode_string(self):
+         self.validate_identity("SELECT u & 5 FROM t")
+         self.validate_identity("SELECT (U&'\\FE01' || 'Test literal') AS label FROM data")
+diff --git a/tests/test_anonymize.py b/tests/test_anonymize.py
+index 3f5e7a10d..646f0e3a8 100644
+--- a/tests/test_anonymize.py
++++ b/tests/test_anonymize.py
+@@ -401,6 +401,63 @@ ORDER  BY aaaw.aaaaaaaaaaaaac,
+             self.assertEqual(rendered, expected)
+             self.assertEqual(len(rendered), len(sql))
+ 
++    def test_unicode_identifier_uescape(self):
++        cases = [
++            ("""SELECT U&"secret" UESCAPE '!'""", """SELECT U&"aaaaaa" UESCAPE '!'"""),
++            (
++                """SELECT U&"secret" UESCAPE '!', 'unfinished""",
++                """SELECT U&"aaaaaa" UESCAPE '!', 'u.........""",
++            ),
++            (
++                """SELECT u&"s!0065cr""et" /* private */ uEsCaPe -- private\n E'\\041', x""",
++                """SELECT u&"aaaaaaa"      /* ....... */ uEsCaPe -- .......\n E'\\041', b""",
++            ),
++            (
++                """SELECT a, b, c, d, e, f, U&"secret" UESCAPE 'g', secret""",
++                """SELECT a, b, c, d, e, f, U&"aaaaag" UESCAPE '!', aaaaag""",
++            ),
++            (
++                """SELECT a, b, c, d, e, f, U&"sg0065cret" UESCAPE 'g', secret""",
++                """SELECT a, b, c, d, e, f, U&"aaaaag"     UESCAPE '!', aaaaag""",
++            ),
++            (
++                r"""SELECT U&"\0062ases" u&"!0078" UESCAPE '!' FROM (VALUES (1)) AS t(bases)""",
++                """SELECT U&"aaaaa"     u&"b"     UESCAPE '!' FROM (VALUES (3)) AS d(aaaaa)""",
++            ),
++        ]
++        for sql, expected in cases:
++            with self.subTest(sql=sql):
++                self.assertEqual(render(sql, anonymize(sql, "postgres"), "postgres"), expected)
++
++        for literal, masked in [
++            ("$tag$g$tag$", "'!'".ljust(11)),
++            (r"E'\147'", "'!'".ljust(7)),
++            (r"E'\u0067'", "'!'".ljust(9)),
++            ("'' -- private\n'g'\n''", "'' -- .......\n'!'\n''"),
++            ("E''\r\n'\\x67'", "E''\r\n'!'   "),
++        ]:
++            sql = f"""SELECT a, b, c, d, e, f, U&"secret" UESCAPE {literal}"""
++            self.assertEqual(
++                render(sql, anonymize(sql, "postgres"), "postgres"),
++                f"""SELECT a, b, c, d, e, f, U&"aaaaag" UESCAPE {masked}""",
++            )
++
++    def test_unicode_identifier_references(self):
++        cases = [
++            (r'U&"\0062ases"', "bases", 'U&"aaaaa"    ', "aaaaa"),
++            (r'U&"\+000062ases"', "bases", 'U&"aaaaa"       ', "aaaaa"),
++            (r'U&"\D83D\DE00"', '"😀"', 'U&"a"         ', '"a"'),
++            ("""u&"a!!b" UESCAPE '!'""", '"a!b"', """u&"aaa"  UESCAPE '!'""", '"aaa"'),
++            ('U&"a""b"', '"a""b"', 'U&"aaa" ', '"aaa" '),
++        ]
++        for ref, column, masked_ref, masked_column in cases:
++            sql = f"SELECT {ref} FROM (VALUES (42)) AS t({column})"
++            with self.subTest(sql=sql):
++                self.assertEqual(
++                    render(sql, anonymize(sql, "postgres"), "postgres"),
++                    f"SELECT {masked_ref} FROM (VALUES (11)) AS c({masked_column})",
++                )
++
+     def test_numbers_keep_their_shape(self):
+         sql = "SELECT 1e, 1.e, 1e10, .5, 2002, 1e-5, 1E+2"
+         rendered = render(sql, anonymize(sql))
+@@ -468,6 +525,11 @@ ORDER  BY aaaw.aaaaaaaaaaaaac,
+             ("SELECT a, /* unterminated comment", "SELECT a, /*.....................", None),
+             ('SELECT a, "unterminated ident', 'SELECT a, "u.................', None),
+             ("SELECT a, $$unterminated heredoc", "SELECT a, $$....................", "postgres"),
++            (
++                """SELECT U&"secret", 'unfinished""",
++                """SELECT U&"aaaaaa", 'u.........""",
++                "postgres",
++            ),
+             ("SELECT a, `unterminated backtick", "SELECT a, `u....................", "mysql"),
+             ("'unterminated secret", "'u..................", None),  # nothing tokenized at all
+             ("SELECT a, '", "SELECT a, '", None),  # remainder shorter than the delimiter

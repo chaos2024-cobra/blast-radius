@@ -1,0 +1,311 @@
+diff --git a/sqlglot/dialects/dialect.py b/sqlglot/dialects/dialect.py
+index bf9cb1ddc..e1f20fe73 100644
+--- a/sqlglot/dialects/dialect.py
++++ b/sqlglot/dialects/dialect.py
+@@ -794,6 +794,9 @@ class Dialect(metaclass=_Dialect):
+     table NULLs differently in this context.
+     """
+ 
++    FOLD_MIXED_TEMPORAL_COMPARISONS = True
++    """Whether to compare literals of different temporal types as datetimes during simplification."""
++
+     HAS_DISTINCT_ARRAY_CONSTRUCTORS = False
+     """
+     Whether the ARRAY constructor is context-sensitive, i.e in Redshift ARRAY[1, 2, 3] != ARRAY(1, 2, 3)
+diff --git a/sqlglot/dialects/sqlite.py b/sqlglot/dialects/sqlite.py
+index ae715fc99..4ea8772f3 100644
+--- a/sqlglot/dialects/sqlite.py
++++ b/sqlglot/dialects/sqlite.py
+@@ -27,6 +27,8 @@ class SQLite(Dialect):
+     USING_COLUMN_ORDER = UsingColumnOrder.IN_PLACE
+     CONCAT_COALESCE = True
+     CONCAT_WS_COALESCE = True
++    # DATE() and DATETIME() return text in different formats.
++    FOLD_MIXED_TEMPORAL_COMPARISONS = False
+     INTERSECT_BINDS_TIGHTER_THAN_UNION_AND_EXCEPT = False
+     NUMBERS_CAN_BE_UNDERSCORE_SEPARATED = True
+     EXPRESSION_METADATA = EXPRESSION_METADATA.copy()
+diff --git a/sqlglot/optimizer/simplify.py b/sqlglot/optimizer/simplify.py
+index 6c0f716ad..23e4a4599 100644
+--- a/sqlglot/optimizer/simplify.py
++++ b/sqlglot/optimizer/simplify.py
+@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
+ import logging
+ import functools
+ import itertools
++import re
+ import typing as t
+ from collections import deque, defaultdict
+ from functools import reduce, wraps
+@@ -33,6 +34,16 @@ logger = logging.getLogger("sqlglot")
+ # Final means that an expression should not be simplified
+ FINAL = "final"
+ 
++SUBMICROSECOND_PRECISION = re.compile(r"[.,]\d{7}")
++
++COMPARABLE_TEMPORAL_TYPES = (
++    exp.DType.DATE,
++    exp.DType.DATETIME,
++    exp.DType.TIMESTAMP,
++    exp.DType.TIMESTAMPNTZ,
++    exp.DType.TIMESTAMP_NS,
++)
++
+ SIMPLIFIABLE = (
+     exp.Binary,
+     exp.Func,
+@@ -389,19 +400,20 @@ def cast_as_date(value: datetime | date | str) -> date | None:
+         return value.date()
+     if isinstance(value, date):
+         return value
+-    try:
+-        return datetime.fromisoformat(value).date()
+-    except ValueError:
+-        return None
++    parsed = cast_as_datetime(value)
++    return parsed.date() if parsed else None
+ 
+ 
+ def cast_as_datetime(
+-    value: datetime | date | str,
++    value: datetime | date | str | None,
+ ) -> datetime | None:
+-    if isinstance(value, datetime):
++    if value is None or isinstance(value, datetime):
+         return value
+     if isinstance(value, date):
+         return datetime(year=value.year, month=value.month, day=value.day)
++    # fromisoformat silently drops fractional digits beyond microseconds.
++    if SUBMICROSECOND_PRECISION.search(value):
++        return None
+     try:
+         return datetime.fromisoformat(value)
+     except ValueError:
+@@ -418,7 +430,7 @@ def cast_value(value: datetime | date | str, to: exp.DataType) -> date | None:
+     return None
+ 
+ 
+-def extract_date(cast: exp.Expr) -> date | None:
++def extract_date(cast: exp.Expr, *, for_comparison: bool = False) -> date | None:
+     if isinstance(cast, exp.Cast):
+         to = cast.to
+     elif isinstance(cast, exp.TsOrDsToDate) and not cast.args.get("format"):
+@@ -426,10 +438,15 @@ def extract_date(cast: exp.Expr) -> date | None:
+     else:
+         return None
+ 
++    # Zoned timestamps can depend on the session time zone, and casts with an
++    # explicit precision can round. Only fold known, unparameterized civil types.
++    if for_comparison and (to.expressions or not cast.is_type(*COMPARABLE_TEMPORAL_TYPES)):
++        return None
++
+     if isinstance(cast.this, exp.Literal):
+         value: t.Any = cast.this.name
+     elif isinstance(cast.this, (exp.Cast, exp.TsOrDsToDate)):
+-        value = extract_date(cast.this)
++        value = extract_date(cast.this, for_comparison=for_comparison)
+     else:
+         return None
+     return cast_value(value, to)
+@@ -439,6 +456,20 @@ def _is_date_literal(expression: exp.Expr) -> bool:
+     return extract_date(expression) is not None
+ 
+ 
++def _comparable_datetimes(
++    a: exp.Expr, b: exp.Expr, dialect: Dialect
++) -> tuple[datetime, datetime] | None:
++    left = cast_as_datetime(extract_date(a, for_comparison=True))
++    if left is None or left.tzinfo is not None:
++        return None
++    right = cast_as_datetime(extract_date(b, for_comparison=True))
++    if right is None or right.tzinfo is not None:
++        return None
++    if not dialect.FOLD_MIXED_TEMPORAL_COMPARISONS and extract_type(a) != extract_type(b):
++        return None
++    return left, right
++
++
+ def extract_interval(expression: exp.Expr) -> relativedelta | None:
+     try:
+         n = to_int(expression.this.to_py())
+@@ -1020,15 +1051,10 @@ class Simplifier:
+                         return None
+                     l = l.name
+                     r = r.name
++                elif datetimes := _comparable_datetimes(l, r, self.dialect):
++                    l, r = datetimes
+                 else:
+-                    l = extract_date(l)
+-                    if not l:
+-                        return None
+-                    r = extract_date(r)
+-                    if not r:
+-                        return None
+-                    # python won't compare date and datetime, but many engines will upcast
+-                    l, r = cast_as_datetime(l), cast_as_datetime(r)
++                    return None
+ 
+                 false = (
+                     exp.false()
+@@ -1360,7 +1386,7 @@ class Simplifier:
+ 
+             if boolean:
+                 return boolean
+-        elif _is_date_literal(a) and isinstance(b, exp.Interval):
++        elif isinstance(b, exp.Interval) and _is_date_literal(a):
+             date, b = extract_date(a), extract_interval(b)
+             if date and b:
+                 target_type = (
+@@ -1382,12 +1408,10 @@ class Simplifier:
+                     else extract_type(b)
+                 )
+                 return date_literal(a + date, target_type)
+-        elif _is_date_literal(a) and _is_date_literal(b):
+-            if isinstance(expression, exp.Predicate):
+-                a, b = extract_date(a), extract_date(b)
+-                boolean = eval_boolean(expression, a, b)
+-                if boolean:
+-                    return boolean
++        elif isinstance(expression, self.COMPARISONS) and (
++            datetimes := _comparable_datetimes(a, b, self.dialect)
++        ):
++            return eval_boolean(expression, *datetimes)
+ 
+         return None
+ 
+diff --git a/sqlglot/typing/bigquery.py b/sqlglot/typing/bigquery.py
+index 8f04bccdd..4e7798411 100644
+--- a/sqlglot/typing/bigquery.py
++++ b/sqlglot/typing/bigquery.py
+@@ -53,17 +53,17 @@ def _annotate_datetime_or_timestamp_add(
+ ) -> exp.Expr:
+     """Annotate DATETIME_ADD / DATETIME_SUB / TIMESTAMP_ADD / TIMESTAMP_SUB.
+ 
+-    Whichever of them is called, BigQuery returns a TIMESTAMP for a TIMESTAMP and a DATETIME
+-    for a DATE or DATETIME. Any other argument, e.g. a string literal, gets the function's own type.
++    BigQuery TIMESTAMP inputs return TIMESTAMP (SQLGlot TIMESTAMPTZ). DATE and DATETIME
++    inputs return DATETIME (SQLGlot TIMESTAMP). A string literal gets the function's own type.
+     """
+     this = expression.this
+     if this.is_type(exp.DType.TIMESTAMPTZ):
+         return self._set_type(expression, exp.DType.TIMESTAMPTZ)
+     if this.is_type(exp.DType.DATE, exp.DType.DATETIME, exp.DType.TIMESTAMP):
+-        return self._set_type(expression, exp.DType.DATETIME)
++        return self._set_type(expression, exp.DType.TIMESTAMP)
+     if isinstance(expression, (exp.TimestampAdd, exp.TimestampSub)):
+         return self._set_type(expression, exp.DType.TIMESTAMPTZ)
+-    return self._set_type(expression, exp.DType.DATETIME)
++    return self._set_type(expression, exp.DType.TIMESTAMP)
+ 
+ 
+ def _annotate_int_pair_as_double(
+diff --git a/tests/dialects/test_bigquery.py b/tests/dialects/test_bigquery.py
+index 067192778..ca8b6d5f9 100644
+--- a/tests/dialects/test_bigquery.py
++++ b/tests/dialects/test_bigquery.py
+@@ -3626,6 +3626,20 @@ OPTIONS (
+         for select in annotated.selects:
+             self.assertEqual(select.type.sql("bigquery"), "TIMESTAMP")
+ 
++    def test_annotate_datetime_arithmetic(self):
++        for sql, dtype in (
++            ("DATETIME_ADD(DATETIME '2024-01-31 00:00:00', INTERVAL 1 DAY)", exp.DType.TIMESTAMP),
++            ("DATETIME_SUB('2024-02-01 00:00:00', INTERVAL 1 DAY)", exp.DType.TIMESTAMP),
++            ("TIMESTAMP_ADD(DATE '2024-01-31', INTERVAL 1 DAY)", exp.DType.TIMESTAMP),
++            (
++                "DATETIME_ADD(TIMESTAMP '2024-01-31 00:00:00+00', INTERVAL 1 DAY)",
++                exp.DType.TIMESTAMPTZ,
++            ),
++        ):
++            with self.subTest(sql=sql):
++                annotated = annotate_types(self.parse_one(sql), dialect="bigquery")
++                self.assertTrue(annotated.is_type(dtype), annotated.type)
++
+     def test_set_operations(self):
+         self.validate_identity("SELECT 1 AS foo INNER UNION ALL SELECT 3 AS foo, 4 AS bar")
+ 
+diff --git a/tests/fixtures/optimizer/simplify.sql b/tests/fixtures/optimizer/simplify.sql
+index 72ee97a06..20f446283 100644
+--- a/tests/fixtures/optimizer/simplify.sql
++++ b/tests/fixtures/optimizer/simplify.sql
+@@ -823,6 +823,55 @@ r IS NOT NULL AND r IS NULL;
+ r IS NOT NULL AND r > 5;
+ r > 5 AND r IS NOT NULL;
+ 
++# execute: true
++TIMESTAMP '2024-02-01 00:00:00' = DATE '2024-02-01';
++TRUE;
++
++# execute: true
++DATE '2024-02-01' >= TIMESTAMP '2024-02-01 10:00:00';
++FALSE;
++
++# dialect: bigquery
++DATE '2024-02-01' = DATETIME '2024-02-01 00:00:00';
++TRUE;
++
++# dialect: bigquery
++x > DATETIME_ADD(DATETIME '2024-01-31 00:00:00', INTERVAL 1 DAY) AND x > DATETIME '2024-02-01 10:00:00';
++x > CAST('2024-02-01 10:00:00' AS DATETIME);
++
++# dialect: duckdb
++# execute: true
++DATE '2024-01-31' + INTERVAL 1 DAY = DATE '2024-02-01';
++TRUE;
++
++# dialect: duckdb
++# execute: true
++DATE '2024-02-01' = TIMESTAMPTZ '2024-02-01 00:00:00+00:00';
++CAST('2024-02-01 00:00:00+00:00' AS TIMESTAMPTZ) = CAST('2024-02-01' AS DATE);
++
++# dialect: duckdb
++# execute: true
++DATE '2018-11-04' = TIMESTAMPTZ '2018-11-04 01:00:00';
++CAST('2018-11-04 01:00:00' AS TIMESTAMPTZ) = CAST('2018-11-04' AS DATE);
++
++# dialect: duckdb
++# execute: true
++CAST(TIMESTAMPTZ '2024-02-01 00:00:00+00:00' AS DATE) = DATE '2024-02-01';
++CAST('2024-02-01' AS DATE) = CAST(CAST('2024-02-01 00:00:00+00:00' AS TIMESTAMPTZ) AS DATE);
++
++# dialect: duckdb
++# execute: true
++DATE '2024-02-01' = TIMESTAMP_NS '2024-02-01 00:00:00.000000001';
++CAST('2024-02-01 00:00:00.000000001' AS TIMESTAMP_NS) = CAST('2024-02-01' AS DATE);
++
++# dialect: postgres
++DATE '2024-02-01' = TIMESTAMP '2024-02-01 00:00:00.0000009';
++CAST('2024-02-01 00:00:00.0000009' AS TIMESTAMP) = CAST('2024-02-01' AS DATE);
++
++# dialect: duckdb
++x > DATE '2024-02-01' AND x > TIMESTAMPTZ '2024-02-01 00:00:00+00:00';
++x > CAST('2024-02-01 00:00:00+00:00' AS TIMESTAMPTZ) AND x > CAST('2024-02-01' AS DATE);
++
+ date '1998-12-01' - interval x day;
+ CAST('1998-12-01' AS DATE) - INTERVAL x DAY;
+ 
+diff --git a/tests/test_optimizer.py b/tests/test_optimizer.py
+index 872b32a9f..a9fc025b8 100644
+--- a/tests/test_optimizer.py
++++ b/tests/test_optimizer.py
+@@ -2318,6 +2318,20 @@ SELECT :with_,WITH :expressions,CTE :this,UNION :this,SELECT :expressions,1,:exp
+         partial.args["ifs"][0].args["true"].type = None
+         self.assertEqual(optimizer.simplify.simplify(partial.copy()), partial)
+ 
++    def test_sqlite_date_datetime_comparison(self):
++        sql = "SELECT DATE('2024-02-01') = CAST('2024-02-01 00:00:00' AS DATETIME)"
++        optimized = optimizer.optimize(sql, dialect="sqlite").sql("sqlite")
++        connection = sqlite3.connect(":memory:")
++        self.addCleanup(connection.close)
++        self.assertEqual(connection.execute(sql).fetchone(), (0,))
++        self.assertEqual(connection.execute(optimized).fetchone(), (0,))
++
++    def test_simplify_temporal_comparison_without_types(self):
++        expr = parse_one("TO_DATE('2024-02-01') < TO_DATE('2024-02-02')", read="databricks")
++        self.assertEqual(optimizer.simplify.simplify(expr.copy(), dialect="databricks"), expr)
++        annotate_types(expr, dialect="databricks")
++        self.assertEqual(optimizer.simplify.simplify(expr, dialect="databricks"), exp.true())
++
+     def test_simplify_string_comparisons(self):
+         with duckdb.connect() as conn:
+             for dtype in (None, "UNKNOWN", "INT", "DECIMAL(10, 2)", "TEXT"):

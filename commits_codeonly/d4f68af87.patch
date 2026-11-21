@@ -1,0 +1,67 @@
+diff --git a/sqlglot/generators/sqlite.py b/sqlglot/generators/sqlite.py
+index b46c7ae65..d8e8076a4 100644
+--- a/sqlglot/generators/sqlite.py
++++ b/sqlglot/generators/sqlite.py
+@@ -17,6 +17,7 @@ from sqlglot.dialects.dialect import (
+     strposition_sql,
+ )
+ from sqlglot.generator import unsupported_args
++from sqlglot.parsers.sqlite import SQLITE_NOW
+ from sqlglot.tokens import TokenType
+ 
+ 
+@@ -266,6 +267,16 @@ class SQLiteGenerator(generator.Generator):
+             return self.func("JSON_EXTRACT", expression.this, expression.expression)
+         return arrow_json_extract_sql(self, expression)
+ 
++    def attimezone_sql(self, expression: exp.AtTimeZone) -> str:
++        if expression == SQLITE_NOW:
++            # SQLite date functions accept 'now' directly and retain its milliseconds.
++            if expression.arg_key == "this" and isinstance(
++                expression.parent, (exp.Date, exp.TimeToStr)
++            ):
++                return "'now'"
++            return self.func("STRFTIME", "'%Y-%m-%d %H:%M:%f'", "'now'")
++        return super().attimezone_sql(expression)
++
+     def dateadd_sql(self, expression: exp.DateAdd) -> str:
+         modifier = expression.expression
+         unit = expression.args.get("unit")
+
+diff --git a/sqlglot/parsers/sqlite.py b/sqlglot/parsers/sqlite.py
+index 9eff4eb64..212da48f8 100644
+--- a/sqlglot/parsers/sqlite.py
++++ b/sqlglot/parsers/sqlite.py
+@@ -8,18 +8,27 @@ from sqlglot.parser import IsPredicatePrecedence, binary_range_parser
+ from sqlglot.tokens import Token, TokenType
+ 
+ 
++SQLITE_NOW = exp.AtTimeZone(this=exp.CurrentTimestamp(), zone=exp.Literal.string("UTC"))
++
++
++def _build_time_value(value: exp.Expr | None, *, as_timestamp: bool = False) -> exp.Expr:
++    # https://www.sqlite.org/lang_datefunc.html#time_values
++    if value is None or (value.is_string and value.name.lower() == "now"):
++        return SQLITE_NOW.copy()
++    return exp.TsOrDsToTimestamp(this=value) if as_timestamp else value
++
++
+ def _build_date(args: list) -> exp.Date | exp.Anonymous:
+     if len(args) <= 1:
+-        return exp.Date.from_arg_list(args)
++        return exp.Date(this=_build_time_value(args[0]) if args else None)
+     return exp.Anonymous(this="DATE", expressions=args)
+ 
+ 
+ def _build_strftime(args: list, dialect: t.Any) -> exp.Anonymous | exp.TimeToStr:
+-    if len(args) == 1:
+-        args.append(exp.CurrentTimestamp())
+-    if len(args) == 2:
++    if 1 <= len(args) <= 2:
+         return exp.TimeToStr(
+-            this=exp.TsOrDsToTimestamp(this=args[1]), format=dialect.format_time(args[0])
++            this=_build_time_value(seq_get(args, 1), as_timestamp=True),
++            format=dialect.format_time(args[0]),
+         )
+     return exp.Anonymous(this="STRFTIME", expressions=args)
+ 

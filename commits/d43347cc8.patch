@@ -1,0 +1,115 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 1e21f01f7..6e3a6eb40 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -4,7 +4,7 @@
+ SQLGlot is a no-dependency SQL parser, transpiler, optimizer, and engine written in pure Python. It supports 31+ SQL dialects and can transpile between them while preserving semantics. The codebase is performance-critical despite being pure Python, with an optional mypyc-compiled C extension for speed improvements (`sqlglotc/`).
+ 
+ ## Development Commands
+-Before contributing read CONTRIBUTING.md
++Read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing. Only maintainers submit pull requests. External contributors can report bugs and request features through GitHub issues.
+ 
+ ### Installation
+ ```bash
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+index 6cbca8bed..6fcb69534 100644
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -7,14 +7,14 @@ easy and transparent as possible, whether it's:
+ 
+ - Reporting a bug
+ - Discussing the current state of the code
+-- Submitting a fix
++- Suggesting a fix
+ - Proposing new features
+ 
+ ## We develop with GitHub
+ 
+-We use GitHub to host code, to track issues and feature requests, as well as accept pull requests.
++SQLGlot accepts pull requests only from maintainers. Anyone can [open an issue](https://github.com/tobymao/sqlglot/issues/new/choose) to report a bug, suggest a fix, or request a feature. The core team decides which issues to take on based on project priorities.
+ 
+-## Finding tasks to work on
++## Finding tasks to work on (maintainers only)
+ 
+ When the core SQLGlot team does not plan to work on an issue, it is usually closed as "not planned". This may happen
+ when a request is exceptionally difficult to address, or because the team deems that it shouldn't be prioritized.
+@@ -25,9 +25,7 @@ need guidance, feel free to ask for clarifications.
+ 
+ Before taking on a task, consider studying the [AST primer](https://github.com/tobymao/sqlglot/blob/main/posts/ast_primer.md) and the [onboarding document](https://github.com/tobymao/sqlglot/blob/main/posts/onboarding.md).
+ 
+-## Submitting code changes
+-
+-Pull requests are the best way to propose changes to the codebase, and we actively welcome them.
++## Submitting code changes (maintainers only)
+ 
+ Pull requests should be small and they need to follow the conventions of the project. For features that require
+ many changes, please reach out to us on [Slack](https://tobikodata.com/slack) before making a request, in order
+@@ -63,7 +61,7 @@ Our policy:
+ - **Disclose LLM use.** Human contributors who used an LLM are encouraged to mention it in a disclaimer.
+ - **Write the PR description yourself.** Keep it concise and human-written; a few clear sentences without
+   emojis summaries and restatements of the diff are worth more than a wall of text.
+-- **If you are a new contributor, prefer opening an issue over a PR.** We are interested in growing
++- **If you are an external contributor, open an issue.** We are interested in growing
+   long-term contributors who genuinely understand the codebase. If you have found a bug or have a fix in
+   mind, open a well-written issue with a reproducible example (see below). The core team can usually
+   address it faster and more accurately than it takes to review an AI-generated PR.
+@@ -86,11 +84,9 @@ We use GitHub issues to track public bugs. Report a bug by opening a new issue.
+ - Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
+ - References (e.g. documentation pages related to the issue)
+ 
+-## Start a discussion using GitHub's [discussions](https://github.com/tobymao/sqlglot/discussions)
++## Request a feature
+ 
+-[We use GitHub discussions](https://github.com/tobymao/sqlglot/discussions/190) to discuss about the current state
+-of the code. If you want to propose a new feature, this is the right place to do it. Just start a discussion, and
+-let us know why you think this feature would be a good addition to SQLGlot (by possibly including some usage examples).
++To propose a feature, [open an issue](https://github.com/tobymao/sqlglot/issues/new/choose) explaining why it would be a good addition to SQLGlot. Include a usage example if you can.
+ 
+ ## Deployment (maintainers only)
+ 
+diff --git a/README.md b/README.md
+index db8dd6c9d..fad330535 100644
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,9 @@ SQLGlot can detect a variety of [syntax errors](#parser-errors), such as unbalan
+ 
+ Learn more about SQLGlot in the API [documentation](https://sqlglot.com/) and the expression tree [primer](https://github.com/tobymao/sqlglot/blob/main/posts/ast_primer.md).
+ 
+-Contributions are very welcome in SQLGlot; read the [contribution guide](https://github.com/tobymao/sqlglot/blob/main/CONTRIBUTING.md) and the [onboarding document](https://github.com/tobymao/sqlglot/blob/main/posts/onboarding.md) to get started!
++SQLGlot now accepts pull requests only from maintainers. Reviewing the growing volume of LLM-generated pull requests was taking time away from fixing bugs and improving SQLGlot.
++
++You can still contribute by [opening an issue](https://github.com/tobymao/sqlglot/issues/new/choose) to report a bug or request a feature. The core team decides which issues to take on and which to close as "not planned" based on project priorities. See the [contribution guide](https://github.com/tobymao/sqlglot/blob/main/CONTRIBUTING.md) for help writing a report.
+ 
+ ## Table of Contents
+ 
+@@ -283,7 +285,7 @@ sqlglot.errors.UnsupportedError: Argument 'accuracy' is not supported for expres
+ 
+ Some queries need additional information to be transpiled accurately, such as the schemas of the referenced tables. This is because certain transformations are type-sensitive and depend on type inference. The `qualify` and `annotate_types` optimizer [rules](https://github.com/tobymao/sqlglot/tree/main/sqlglot/optimizer) can provide this information, but they are not used by default because they add overhead and complexity.
+ 
+-Transpilation is a hard problem, so SQLGlot solves it incrementally. Some dialect pairs may lack support for certain inputs, but coverage improves over time. We highly appreciate well-documented and tested issues or PRs, so feel free to [reach out](#get-in-touch) if you need guidance!
++Transpilation is a hard problem, so SQLGlot solves it incrementally. Some dialect pairs may lack support for certain inputs, but coverage improves over time. If a translation is incorrect, please [open an issue](https://github.com/tobymao/sqlglot/issues/new/choose) with the input SQL, the source and target dialects, and the output you expected.
+ 
+ ### Build and Modify SQL
+ 
+@@ -638,7 +640,7 @@ Without dateutil, the optimizer leaves this arithmetic unevaluated.
+ 
+ **Official Dialects** are maintained by the core SQLGlot team with higher priority for bug fixes and feature additions.
+ 
+-**Community Dialects** are developed and maintained primarily through community contributions. These are fully functional but may receive lower priority for issue resolution compared to officially supported dialects. We welcome and encourage community contributions to improve these dialects.
++**Community Dialects** grew out of community contributions. These are fully functional but may receive lower priority for issue resolution compared to officially supported dialects. We welcome bug reports and feature requests for these dialects.
+ 
+ **Plugin Dialects** (supported since v28.6.0) are third-party dialects developed and maintained in external repositories by independent contributors. These dialects are not part of the SQLGlot codebase and are distributed as separate packages. The SQLGlot team does not provide support or maintenance for plugin dialects — please direct any issues or feature requests to their respective repositories. See [Creating a Dialect Plugin](#creating-a-dialect-plugin) below for information on how to build your own.
+ 
+diff --git a/posts/sql_diff.md b/posts/sql_diff.md
+index 4d07d7fed..467d7a8af 100644
+--- a/posts/sql_diff.md
++++ b/posts/sql_diff.md
+@@ -360,7 +360,7 @@ There are still a few basic things we can do in our implementation to help impro
+ * Cache bigram histograms to avoid computing them more than once for the same node.
+ * Compute the canonical SQL string representation for each tree once while caching string representations of all inner nodes. This prevents redundant tree traversals when bigrams are computed.
+ 
+-At the time of writing only the first two optimizations have been implemented, so there is an opportunity to contribute for anyone who’s interested.
++At the time of writing only the first two optimizations have been implemented. If diffing is slow for your queries, please [open an issue](https://github.com/tobymao/sqlglot/issues/new/choose) with an example.
+ 
+ ## Alternative Solutions
+ 

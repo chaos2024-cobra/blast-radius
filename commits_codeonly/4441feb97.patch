@@ -1,0 +1,64 @@
+diff --git a/sqlglot/dialects/exasol.py b/sqlglot/dialects/exasol.py
+index 0f6299911..aef60abbf 100644
+--- a/sqlglot/dialects/exasol.py
++++ b/sqlglot/dialects/exasol.py
+@@ -58,6 +58,7 @@ class Exasol(Dialect):
+             # https://docs.exasol.com/db/latest/sql_references/functions/alphabeticallistfunctions/if.htm
+             "ENDIF": TokenType.END,
+             "LONG VARCHAR": TokenType.TEXT,
++            "HASHTYPE": TokenType.HASHTYPE,
+             "REGEXP_LIKE": TokenType.RLIKE,
+             "SEPARATOR": TokenType.SEPARATOR,
+             "SYSTIMESTAMP": TokenType.SYSTIMESTAMP,
+
+diff --git a/sqlglot/expressions/datatypes.py b/sqlglot/expressions/datatypes.py
+index 269743844..7ae880a0d 100644
+--- a/sqlglot/expressions/datatypes.py
++++ b/sqlglot/expressions/datatypes.py
+@@ -74,6 +74,7 @@ class DType(AutoName):
+     GEOGRAPHY = auto()
+     GEOGRAPHYPOINT = auto()
+     GEOMETRY = auto()
++    HASHTYPE = auto()
+     POINT = auto()
+     RING = auto()
+     LINESTRING = auto()
+
+diff --git a/sqlglot/generators/exasol.py b/sqlglot/generators/exasol.py
+index 25d27098f..9dce36069 100644
+--- a/sqlglot/generators/exasol.py
++++ b/sqlglot/generators/exasol.py
+@@ -266,6 +266,7 @@ def _group_by_all(expression: exp.Expr) -> exp.Expr:
+ 
+ 
+ class ExasolGenerator(generator.Generator):
++    DATA_TYPE_SPECIFIERS_ALLOWED = True
+     SELECT_KINDS = ()
+     TRY_SUPPORTED = False
+     SUPPORTS_UESCAPE = False
+
+diff --git a/sqlglot/parser.py b/sqlglot/parser.py
+index 5591736db..a79170d55 100644
+--- a/sqlglot/parser.py
++++ b/sqlglot/parser.py
+@@ -621,6 +621,7 @@ class Parser:
+         TokenType.GEOGRAPHY,
+         TokenType.GEOGRAPHYPOINT,
+         TokenType.GEOMETRY,
++        TokenType.HASHTYPE,
+         TokenType.POINT,
+         TokenType.RING,
+         TokenType.LINESTRING,
+
+diff --git a/sqlglot/tokenizer_core.py b/sqlglot/tokenizer_core.py
+index b5f082893..869cab4c4 100644
+--- a/sqlglot/tokenizer_core.py
++++ b/sqlglot/tokenizer_core.py
+@@ -195,6 +195,7 @@ class TokenType(IntEnum):
+     GEOGRAPHYPOINT = auto()
+     NULLABLE = auto()
+     GEOMETRY = auto()
++    HASHTYPE = auto()
+     POINT = auto()
+     RING = auto()
+     LINESTRING = auto()

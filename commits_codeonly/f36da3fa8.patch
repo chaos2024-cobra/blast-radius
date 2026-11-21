@@ -1,0 +1,48 @@
+diff --git a/sqlglot/dialects/dialect.py b/sqlglot/dialects/dialect.py
+index fed01b2c7..b3fe80dc1 100644
+--- a/sqlglot/dialects/dialect.py
++++ b/sqlglot/dialects/dialect.py
+@@ -1521,6 +1521,7 @@ def no_pivot_sql(self: Generator, expression: exp.Pivot) -> str:
+ 
+ 
+ def no_trycast_sql(self: Generator, expression: exp.TryCast) -> str:
++    self.unsupported("TRY_CAST is unsupported. CAST may not return NULL on conversion failure.")
+     return self.cast_sql(expression)
+ 
+ 
+
+diff --git a/sqlglot/generators/hive.py b/sqlglot/generators/hive.py
+index 20a071db9..9c748aa59 100644
+--- a/sqlglot/generators/hive.py
++++ b/sqlglot/generators/hive.py
+@@ -18,7 +18,6 @@ from sqlglot.dialects.dialect import (
+     min_or_least,
+     no_ilike_sql,
+     no_recursive_cte_sql,
+-    no_trycast_sql,
+     regexp_extract_sql,
+     regexp_replace_sql,
+     rename_func,
+@@ -370,7 +369,7 @@ class HiveGenerator(generator.Generator):
+         exp.TsOrDsAdd: _add_date_sql,
+         exp.TsOrDsDiff: _date_diff_sql,
+         exp.TsOrDsToDate: _to_date_sql,
+-        exp.TryCast: no_trycast_sql,
++        exp.TryCast: lambda self, e: self.cast_sql(e),
+         exp.Trim: trim_sql,
+         exp.Unicode: rename_func("ASCII"),
+         exp.UnixToStr: lambda self, e: self.func(
+
+diff --git a/sqlglot/parsers/drill.py b/sqlglot/parsers/drill.py
+index 73a3c03ee..ed25d6212 100644
+--- a/sqlglot/parsers/drill.py
++++ b/sqlglot/parsers/drill.py
+@@ -16,8 +16,6 @@ def _build_ilike(args: list) -> exp.Expr:
+ class DrillParser(parser.Parser):
+     IS_PREDICATE_PRECEDENCE = IsPredicatePrecedence.COMPARISON
+ 
+-    STRICT_CAST = False
+-
+     TABLE_ALIAS_TOKENS = parser.Parser.TABLE_ALIAS_TOKENS | {
+         TokenType.ANTI,
+         TokenType.SEMI,

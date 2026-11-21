@@ -1,0 +1,52 @@
+diff --git a/sqlglot/dialects/postgres.py b/sqlglot/dialects/postgres.py
+index 4f9010169..f122f47d8 100644
+--- a/sqlglot/dialects/postgres.py
++++ b/sqlglot/dialects/postgres.py
+@@ -119,13 +119,17 @@ class Postgres(Dialect):
+             "BEGIN": TokenType.BEGIN,
+             "BIGSERIAL": TokenType.BIGSERIAL,
+             "CSTRING": TokenType.PSEUDO_TYPE,
++            "DEALLOCATE": TokenType.COMMAND,
+             "DECLARE": TokenType.COMMAND,
++            "DISCARD": TokenType.COMMAND,
+             "DO": TokenType.COMMAND,
+             "EXEC": TokenType.COMMAND,
+             "HSTORE": TokenType.HSTORE,
+             "INT8": TokenType.BIGINT,
++            "LISTEN": TokenType.COMMAND,
+             "MONEY": TokenType.MONEY,
+             "NAME": TokenType.NAME,
++            "NOTIFY": TokenType.COMMAND,
+             "OID": TokenType.OBJECT_IDENTIFIER,
+             "ONLY": TokenType.ONLY,
+             "POINT": TokenType.POINT,
+@@ -136,6 +140,7 @@ class Postgres(Dialect):
+             "SMALLSERIAL": TokenType.SMALLSERIAL,
+             "TEMP": TokenType.TEMPORARY,
+             "TYPE": TokenType.TYPE,
++            "UNLISTEN": TokenType.COMMAND,
+             "REGCLASS": TokenType.OBJECT_IDENTIFIER,
+             "REGCOLLATION": TokenType.OBJECT_IDENTIFIER,
+             "REGCONFIG": TokenType.OBJECT_IDENTIFIER,
+diff --git a/tests/dialects/test_postgres.py b/tests/dialects/test_postgres.py
+index f0a9a6f6a..7e90d8154 100644
+--- a/tests/dialects/test_postgres.py
++++ b/tests/dialects/test_postgres.py
+@@ -454,6 +454,17 @@ class TestPostgres(Validator):
+         self.validate_identity("SELECT * FROM r CROSS JOIN LATERAL UNNEST(ARRAY[1]) AS s(location)")
+         self.validate_identity("CAST(1 AS DECIMAL) / CAST(2 AS DECIMAL) * -100")
+         self.validate_identity("EXEC AS myfunc @id = 123", check_command_warning=True)
++        for sql in (
++            "LISTEN c",
++            "UNLISTEN *",
++            "NOTIFY c, 'payload'",
++            "DEALLOCATE PREPARE p",
++            "DEALLOCATE ALL",
++            "DISCARD ALL",
++        ):
++            with self.subTest(sql):
++                self.validate_identity(sql, check_command_warning=True).assert_is(exp.Command)
++        self.validate_identity("SELECT listen, notify, discard, deallocate, unlisten FROM t")
+         self.validate_identity("SELECT CURRENT_SCHEMA")
+         self.validate_identity("SELECT CURRENT_USER")
+         self.validate_identity("SELECT CURRENT_ROLE")

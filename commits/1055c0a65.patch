@@ -1,0 +1,70 @@
+diff --git a/sqlglot/generators/sqlite.py b/sqlglot/generators/sqlite.py
+index d8e8076a4..cb10d6e20 100644
+--- a/sqlglot/generators/sqlite.py
++++ b/sqlglot/generators/sqlite.py
+@@ -164,7 +164,6 @@ class SQLiteGenerator(generator.Generator):
+         exp.LogicalOr: rename_func("MAX"),
+         exp.LogicalAnd: rename_func("MIN"),
+         exp.Pivot: no_pivot_sql,
+-        exp.Rand: lambda self, e: self.func("RANDOM", e.this),
+         exp.RegexpLike: lambda self, e: self.binary(e, "REGEXP"),
+         exp.Select: transforms.preprocess(
+             [
+@@ -243,6 +242,14 @@ class SQLiteGenerator(generator.Generator):
+ 
+         return super().insert_sql(expression)
+ 
++    def rand_sql(self, expression: exp.Rand) -> str:
++        random = self.func("RANDOM", expression.this)
++        if any(expression.args.values()):
++            return random
++
++        # Keep 53 bits so even the largest draw is exactly representable and strictly below 1 after division.
++        return f"(CAST({random} & 9007199254740991 AS REAL) / 9007199254740992)"
++
+     def bitwiseandagg_sql(self, expression: exp.BitwiseAndAgg) -> str:
+         self.unsupported("BITWISE_AND aggregation is not supported in SQLite")
+         return self.function_fallback_sql(expression)
+diff --git a/tests/dialects/test_dialect.py b/tests/dialects/test_dialect.py
+index c88de3b9c..f9ae94a1b 100644
+--- a/tests/dialects/test_dialect.py
++++ b/tests/dialects/test_dialect.py
+@@ -4160,7 +4160,7 @@ FROM subquery2""",
+                 "postgres": "RANDOM()",
+                 "presto": "RAND()",
+                 "spark": "RAND()",
+-                "sqlite": "RANDOM()",
++                "sqlite": "(CAST(RANDOM() & 9007199254740991 AS REAL) / 9007199254740992)",
+                 "tsql": "RAND()",
+             },
+             read={
+diff --git a/tests/dialects/test_sqlite.py b/tests/dialects/test_sqlite.py
+index 608a57c3e..7fb9158f3 100644
+--- a/tests/dialects/test_sqlite.py
++++ b/tests/dialects/test_sqlite.py
+@@ -242,6 +242,25 @@ class TestSQLite(Validator):
+             connection.close()
+ 
+     def test_random(self):
++        unit = "(CAST(RANDOM() & 9007199254740991 AS REAL) / 9007199254740992)"
++        self.validate_all(
++            f"SELECT {unit} < 0.1",
++            read={
++                "bigquery": "SELECT RAND() < 0.1",
++                "mysql": "SELECT RAND() < 0.1",
++                "postgres": "SELECT RANDOM() < 0.1",
++            },
++        )
++        with closing(sqlite3.connect(":memory:")) as conn:
++            for raw, expected in ((0, 0.0), (-1, 1 - 2**-53), (2**63 - 1, 1 - 2**-53)):
++                conn.create_function("RANDOM", 0, lambda: raw)
++                value, reciprocal = conn.execute(
++                    parse_one("SELECT RAND(), 1.0 / RAND()", read="mysql").sql("sqlite")
++                ).fetchone()
++                self.assertIsInstance(value, float)
++                self.assertEqual(value, expected)
++                self.assertEqual(reciprocal, 1 / expected if expected else None)
++
+         duckdb_random = "CAST((((CAST(FLOOR(RANDOM() * 4294967296) AS INT128) * 4294967296) + CAST(FLOOR(RANDOM() * 4294967296) AS INT128)) % ((CAST(9223372036854775807 AS INT128) - CAST(-9223372036854775807 AS INT128)) + 1)) + CAST(-9223372036854775807 AS INT128) AS BIGINT)"
+         self.validate_all(
+             "SELECT RANDOM()",

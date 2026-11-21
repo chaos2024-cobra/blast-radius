@@ -1,0 +1,140 @@
+diff --git a/sqlglot/generators/duckdb.py b/sqlglot/generators/duckdb.py
+index 2aabd74a6..e8b5ef9cf 100644
+--- a/sqlglot/generators/duckdb.py
++++ b/sqlglot/generators/duckdb.py
+@@ -45,6 +45,8 @@ from sqlglot.helper import find_new_name, is_date_unit, seq_get
+ from sqlglot.optimizer.scope import find_all_in_scope
+ from builtins import type as Type
+ 
++_SIMILAR_TO_REGEX_CHARS = frozenset(r"\|*+?{}()[]")
++
+ _CONNECT_BY_ARGS_TO_SKIP = frozenset({"connect", "where", "from_", "with_", "expressions"})
+ 
+ # Regex to detect time zones in timestamps of the form [+|-]TT[:tt]
+@@ -2873,6 +2875,18 @@ class DuckDBGenerator(generator.Generator):
+ 
+         return strposition_sql(self, expression)
+ 
++    def similarto_sql(self, expression: exp.SimilarTo) -> str:
++        pattern = expression.expression.unnest()
++        if (
++            pattern.is_string
++            and not isinstance(expression.parent, exp.Escape)
++            and _SIMILAR_TO_REGEX_CHARS.isdisjoint(pattern.name)
++        ):
++            return self.sql(expression.this.like(pattern))
++
++        self.unsupported("Cannot translate this SIMILAR TO pattern to DuckDB LIKE")
++        return super().similarto_sql(expression)
++
+     def substring_sql(self, expression: exp.Substring) -> str:
+         if expression.args.get("zero_start"):
+             start = expression.args.get("start")
+diff --git a/sqlglot/generators/postgres.py b/sqlglot/generators/postgres.py
+index 956c97164..319ab667f 100644
+--- a/sqlglot/generators/postgres.py
++++ b/sqlglot/generators/postgres.py
+@@ -44,6 +44,8 @@ from sqlglot.generator import unsupported_args
+ from sqlglot.helper import ensure_list, seq_get, to_int
+ 
+ 
++_REGEXP_FULL_MATCH_METACHARS = frozenset(r"\|*+?{}()[].^$%_")
++
+ DATE_DIFF_FACTOR = {
+     "MICROSECOND": " * 1000000",
+     "MILLISECOND": " * 1000",
+@@ -644,6 +646,17 @@ class PostgresGenerator(generator.Generator):
+         self.unsupported("PostgreSQL does not support RESPECT NULLS.")
+         return self.sql(expression.this)
+ 
++    @unsupported_args("options")
++    def regexpfullmatch_sql(self, expression: exp.RegexpFullMatch) -> str:
++        pattern = expression.expression.unnest()
++        if not pattern.is_string or not _REGEXP_FULL_MATCH_METACHARS.isdisjoint(pattern.name):
++            self.unsupported(
++                "Only plain literal REGEXP_FULL_MATCH patterns translate to SIMILAR TO"
++            )
++
++        predicate = exp.SimilarTo(this=expression.this, expression=expression.expression)
++        return self.sql(exp.paren(predicate, copy=False))
++
+     def regexplike_sql(self, expression: exp.RegexpLike) -> str:
+         flag = expression.args.get("flag")
+         if not flag:
+diff --git a/sqlglot/parsers/duckdb.py b/sqlglot/parsers/duckdb.py
+index 88a17c4cc..6e341672f 100644
+--- a/sqlglot/parsers/duckdb.py
++++ b/sqlglot/parsers/duckdb.py
+@@ -156,6 +156,8 @@ class DuckDBParser(parser.Parser):
+         **parser.Parser.RANGE_PARSERS,
+         TokenType.DAMP: binary_range_parser(exp.ArrayOverlaps),
+         TokenType.TILDE: lambda self, this: self._parse_tilde(this),
++        # https://duckdb.org/docs/stable/sql/functions/pattern_matching#similar-to
++        TokenType.SIMILAR_TO: _parse_regexp_full_match,
+     }
+ 
+     EXPONENT = {
+diff --git a/tests/dialects/test_duckdb.py b/tests/dialects/test_duckdb.py
+index 38b0ab3e5..3d2f34d81 100644
+--- a/tests/dialects/test_duckdb.py
++++ b/tests/dialects/test_duckdb.py
+@@ -1400,6 +1400,7 @@ class TestDuckDB(Validator):
+             },
+         )
+         self.validate_identity("REGEXP_FULL_MATCH(x, y, 'i')")
++
+         self.validate_all("SELECT * FROM 'x.y'", write={"duckdb": 'SELECT * FROM "x.y"'})
+         self.validate_all(
+             "SELECT LIST(DISTINCT sample_col) FILTER(WHERE NOT sample_col IS NULL) FROM sample_table",
+@@ -2357,6 +2358,51 @@ class TestDuckDB(Validator):
+             },
+         )
+ 
++    def test_similar_to(self):
++        self.validate_identity("x SIMILAR TO 'a_c%'", "REGEXP_FULL_MATCH(x, 'a_c%')")
++        self.validate_identity("x NOT SIMILAR TO 'a.c'", "NOT REGEXP_FULL_MATCH(x, 'a.c')")
++        self.validate_all(
++            "x LIKE 'a_c%'",
++            read={"postgres": "x SIMILAR TO 'a_c%'", "redshift": "x SIMILAR TO 'a_c%'"},
++        )
++        self.validate_all("x LIKE 'a.c^$'", read={"postgres": "x SIMILAR TO ('a.c^$')"})
++        self.validate_all("NOT x LIKE '%b%'", read={"postgres": "x NOT SIMILAR TO '%b%'"})
++
++        for sql in (
++            "x SIMILAR TO '(a|b)%'",
++            r"x SIMILAR TO '\d'",
++            "x SIMILAR TO '[[:digit:]%]'",
++            "x SIMILAR TO 'a!_c' ESCAPE '!'",
++            "x SIMILAR TO y",
++        ):
++            with self.subTest(sql), self.assertRaises(UnsupportedError):
++                parse_one(sql, read="postgres").sql("duckdb", unsupported_level=ErrorLevel.RAISE)
++
++    def test_regexp_full_match_to_postgres(self):
++        sql = "SELECT 'abc' SIMILAR TO 'abc', 'xabc' SIMILAR TO 'abc'"
++        self.assertEqual(
++            self.parse_one(sql).sql("postgres", unsupported_level=ErrorLevel.RAISE),
++            "SELECT ('abc' SIMILAR TO 'abc'), ('xabc' SIMILAR TO 'abc')",
++        )
++        self.validate_all(
++            "SELECT 'xabc' NOT SIMILAR TO 'abc'",
++            write={"postgres": "SELECT NOT ('xabc' SIMILAR TO 'abc')"},
++        )
++        self.validate_all(
++            "SELECT REGEXP_FULL_MATCH('abc', 'abc') || '!', '!' || REGEXP_FULL_MATCH('abc', 'abc')",
++            write={
++                "postgres": "SELECT ('abc' SIMILAR TO 'abc') || '!', '!' || ('abc' SIMILAR TO 'abc')"
++            },
++        )
++        for sql in (
++            "SELECT 'abc' SIMILAR TO 'a.c'",
++            "SELECT 'a_c%' SIMILAR TO 'a_c%'",
++            "SELECT 'abc' SIMILAR TO p FROM (VALUES ('abc')) AS t(p)",
++            "SELECT REGEXP_FULL_MATCH('ABC', 'abc', 'i')",
++        ):
++            with self.subTest(sql):
++                self.validate_all(sql, write={"postgres": UnsupportedError})
++
+     def test_array_index(self):
+         with self.assertLogs(helper_logger) as cm:
+             self.validate_all(

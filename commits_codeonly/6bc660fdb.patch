@@ -1,0 +1,12 @@
+diff --git a/sqlglot/parsers/mysql.py b/sqlglot/parsers/mysql.py
+index 3ba279adf..02652345f 100644
+--- a/sqlglot/parsers/mysql.py
++++ b/sqlglot/parsers/mysql.py
+@@ -186,6 +186,7 @@ class MySQLParser(parser.Parser):
+             exp.Anonymous(this="VALUES", expressions=[self._parse_id_var()])
+         ),
+         "JSON_VALUE": lambda self: self._parse_json_value(),
++        "MID": lambda self: self._parse_substring(),
+         "SUBSTR": lambda self: self._parse_substring(),
+     }
+ 

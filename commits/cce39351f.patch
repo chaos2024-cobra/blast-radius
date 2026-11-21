@@ -1,0 +1,82 @@
+diff --git a/sqlglot/parser.py b/sqlglot/parser.py
+index 28c9289b9..1ebfc77b3 100644
+--- a/sqlglot/parser.py
++++ b/sqlglot/parser.py
+@@ -3984,14 +3984,14 @@ class Parser:
+             )
+         return self._parse_as_command(self._prev)
+ 
+-    def _parse_delete(self) -> exp.Delete:
++    def _parse_delete(self, alias_tokens: t.Collection[TokenType] | None = None) -> exp.Delete:
+         hint = self._parse_hint()
+ 
+         # This handles MySQL's "Multiple-Table Syntax"
+         # https://dev.mysql.com/doc/refman/8.0/en/delete.html
+         tables = None
+         if not self._match(TokenType.FROM, advance=False):
+-            tables = self._parse_csv(self._parse_table) or None
++            tables = self._parse_csv(lambda: self._parse_table(alias_tokens=alias_tokens)) or None
+ 
+         returning = self._parse_returning()
+ 
+@@ -3999,7 +3999,8 @@ class Parser:
+             exp.Delete(
+                 hint=hint,
+                 tables=tables,
+-                this=self._match(TokenType.FROM) and self._parse_table(joins=True),
++                this=self._match(TokenType.FROM)
++                and self._parse_table(joins=True, alias_tokens=alias_tokens),
+                 using=self._match(TokenType.USING)
+                 and self._parse_csv(lambda: self._parse_table(joins=True)),
+                 cluster=self._match(TokenType.ON) and self._parse_on_property(),
+diff --git a/sqlglot/parsers/teradata.py b/sqlglot/parsers/teradata.py
+index a4f88e135..c9fe9ef95 100644
+--- a/sqlglot/parsers/teradata.py
++++ b/sqlglot/parsers/teradata.py
+@@ -262,6 +262,14 @@ class TeradataParser(parser.Parser):
+             )
+         )
+ 
++    def _parse_delete(self, alias_tokens: t.Collection[TokenType] | None = None) -> exp.Delete:
++        expression = super()._parse_delete(
++            alias_tokens=alias_tokens or self.TABLE_ALIAS_TOKENS - {TokenType.ALL}
++        )
++        if not expression.args.get("where"):
++            self._match(TokenType.ALL)
++        return expression
++
+     # FROM before SET in Teradata UPDATE syntax
+     # https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/Teradata-VantageTM-SQL-Data-Manipulation-Language-17.20/Statement-Syntax/UPDATE/UPDATE-Syntax-Basic-Form-FROM-Clause
+     def _parse_update(self) -> exp.Update:
+diff --git a/tests/dialects/test_teradata.py b/tests/dialects/test_teradata.py
+index a4ff7bdc7..1c4d5c13a 100644
+--- a/tests/dialects/test_teradata.py
++++ b/tests/dialects/test_teradata.py
+@@ -346,6 +346,27 @@ class TestTeradata(Validator):
+                 with self.assertRaises(ParseError):
+                     self.parse_one(sql, error_level=ErrorLevel.RAISE)
+ 
++    def test_delete_all(self):
++        for prefix in ("DELETE", "DELETE FROM", "DEL FROM"):
++            for table, alias in (("t", ""), ("db.t", ""), ("t AS d", "d"), ('t AS "ALL"', "ALL")):
++                sql = f"{prefix} {table} ALL"
++                expected = f"{prefix.replace('DEL FROM', 'DELETE FROM')} {table}"
++                with self.subTest(sql=sql):
++                    expression = self.validate_identity(sql, expected).assert_is(exp.Delete)
++                    self.assertEqual(expression, self.parse_one(expected))
++                    target = expression.find(exp.Table)
++                    self.assertEqual(target.name, "t")
++                    self.assertEqual(target.alias, alias)
++                    self.assertIsNone(expression.args.get("where"))
++
++        self.validate_identity("DELETE FROM t WHERE id = 1")
++        self.validate_identity("DELETE FROM t AS d WHERE d.id = 1")
++        self.validate_identity('DELETE FROM t AS "ALL"')
++        self.validate_identity("SELECT * FROM t ALL", "SELECT * FROM t AS ALL")
++        self.assertEqual(parse_one("DELETE FROM t ALL").this.alias, "ALL")
++        with self.assertRaises(ParseError):
++            self.parse_one("DELETE FROM t WHERE id = 1 ALL")
++
+     def test_teradata(self):
+         self.validate_all(
+             "RANDOM(l, u)",

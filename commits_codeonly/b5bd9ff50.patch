@@ -1,0 +1,12 @@
+diff --git a/sqlglot/typing/bigquery.py b/sqlglot/typing/bigquery.py
+index 4e7798411..b81723e69 100644
+--- a/sqlglot/typing/bigquery.py
++++ b/sqlglot/typing/bigquery.py
+@@ -255,6 +255,7 @@ EXPRESSION_METADATA = {
+             exp.Log,
+             exp.Round,
+             exp.Sqrt,
++            exp.Trunc,
+         }
+     },
+     **{

@@ -1,0 +1,73 @@
+diff --git a/sqlglot/parsers/teradata.py b/sqlglot/parsers/teradata.py
+index b4b8d512e..16c7a7061 100644
+--- a/sqlglot/parsers/teradata.py
++++ b/sqlglot/parsers/teradata.py
+@@ -274,6 +274,30 @@ class TeradataParser(parser.Parser):
+             self._match(TokenType.ALL)
+         return expression
+ 
++    def _parse_insert(self) -> exp.Insert | exp.MultitableInserts:
++        expression = super()._parse_insert()
++        target = expression.this
++        if (
++            isinstance(expression, exp.Insert)
++            and not expression.expression
++            and not expression.args.get("default")
++            and not expression.args.get("source")
++            and isinstance(target, exp.Schema)
++            and target.expressions
++            and all(
++                isinstance(value, (exp.Literal, exp.Func, exp.Null)) for value in target.expressions
++            )
++        ):
++            expression.set("this", target.this)
++            expression.set(
++                "expression",
++                self.expression(
++                    exp.Values(expressions=[exp.Tuple(expressions=target.expressions)]),
++                    comments=target.pop_comments(),
++                ),
++            )
++        return expression
++
+     # FROM before SET in Teradata UPDATE syntax
+     # https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/Teradata-VantageTM-SQL-Data-Manipulation-Language-17.20/Statement-Syntax/UPDATE/UPDATE-Syntax-Basic-Form-FROM-Clause
+     def _parse_update(self) -> exp.Update:
+diff --git a/tests/dialects/test_teradata.py b/tests/dialects/test_teradata.py
+index 7dc52024f..28f15c0bb 100644
+--- a/tests/dialects/test_teradata.py
++++ b/tests/dialects/test_teradata.py
+@@ -393,6 +393,33 @@ class TestTeradata(Validator):
+         self.parse_one("BEGIN TRANSACTION").assert_is(exp.Transaction)
+         self.assertNotIsInstance(parse_one("SELECT BEGIN(p) FROM t").expressions[0], exp.Anonymous)
+ 
++    def test_implicit_insert_values(self):
++        for prefix in ("INSERT INTO", "INSERT"):
++            for table in ("t", "db.t"):
++                for row in (
++                    "(1, CURRENT_TIMESTAMP(0), 'value')",
++                    "(2, NULL, 'null')",
++                    "(COALESCE(NULL, 3), CAST(NULL AS TIMESTAMP(0)), CAST('cast-row' AS VARCHAR(20)))",
++                ):
++                    sql = f"{prefix} {table} {row}"
++                    expected = f"INSERT INTO {table} VALUES {row}"
++                    with self.subTest(sql=sql):
++                        expression = self.validate_identity(sql, expected).assert_is(exp.Insert)
++                        expression.this.assert_is(exp.Table)
++                        values = expression.expression.assert_is(exp.Values)
++                        self.assertEqual(len(values.expressions), 1)
++                        values.expressions[0].assert_is(exp.Tuple)
++                        self.assertIsNone(expression.find(exp.ColumnDef))
++                        self.assertEqual(expression, self.parse_one(expected))
++
++        self.validate_identity("INSERT INTO t (a, b) VALUES (1, 'value')")
++        self.validate_identity("INSERT INTO t (a, b) SELECT a, b FROM s")
++        self.validate_identity("INSERT INTO t VALUES (1, 'value')")
++        self.validate_identity("INSERT INTO t SELECT a, b FROM s")
++        self.parse_one("INSERT INTO t (a, b)").this.assert_is(exp.Schema)
++        self.parse_one("INSERT INTO t (a INT, b VARCHAR(10))").this.assert_is(exp.Schema)
++        parse_one("INSERT INTO t (1, 'value')").this.assert_is(exp.Schema)
++
+     def test_teradata(self):
+         self.validate_all(
+             "RANDOM(l, u)",

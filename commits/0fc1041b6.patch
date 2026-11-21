@@ -1,0 +1,40 @@
+diff --git a/sqlglot/generator.py b/sqlglot/generator.py
+index d1be679dd..6b430ee1e 100644
+--- a/sqlglot/generator.py
++++ b/sqlglot/generator.py
+@@ -2068,13 +2068,7 @@ class Generator:
+                     and node.args.get("limit")
+                 ):
+                     node = node.subquery(copy=False)
+-                    if not self.SET_OP_PARENTHESIZED_OPERANDS:
+-                        node = exp.select("*").from_(node, copy=False)
+-                elif (
+-                    not self.SET_OP_PARENTHESIZED_OPERANDS
+-                    and isinstance(node, exp.Subquery)
+-                    and isinstance(node.unnest(), exp.SetOperation)
+-                ):
++                if not self.SET_OP_PARENTHESIZED_OPERANDS and isinstance(node, exp.Subquery):
+                     node = exp.select("*").from_(node, copy=False)
+                 sqls.append(open_parens + self.indent(self.sql(node), level=depth, pad=0))
+                 open_parens = ""
+diff --git a/tests/dialects/test_sqlite.py b/tests/dialects/test_sqlite.py
+index 19020bdcf..2b4e60dd8 100644
+--- a/tests/dialects/test_sqlite.py
++++ b/tests/dialects/test_sqlite.py
+@@ -521,6 +521,16 @@ class TestSQLite(Validator):
+                 with self.subTest(sql=sql, dialect=dialect):
+                     self.assertEqual(expression.sql(dialect), output)
+ 
++    def test_parenthesized_set_operands(self):
++        self.validate_all(
++            "SELECT * FROM (SELECT DISTINCT a FROM t) EXCEPT SELECT * FROM (SELECT DISTINCT a FROM u)",
++            read={"duckdb": "(SELECT DISTINCT a FROM t) EXCEPT (SELECT DISTINCT a FROM u)"},
++        )
++        self.validate_all(
++            "SELECT 0 UNION ALL SELECT * FROM (SELECT a FROM t ORDER BY a DESC LIMIT 1)",
++            read={"duckdb": "SELECT 0 UNION ALL (SELECT a FROM t ORDER BY a DESC LIMIT 1)"},
++        )
++
+     def test_subquery_modifiers(self):
+         for source, expected in (
+             (

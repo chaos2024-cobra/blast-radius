@@ -1,0 +1,28 @@
+diff --git a/sqlglot/parsers/snowflake.py b/sqlglot/parsers/snowflake.py
+index 493d1b7aa..50065b33a 100644
+--- a/sqlglot/parsers/snowflake.py
++++ b/sqlglot/parsers/snowflake.py
+@@ -804,6 +804,7 @@ class SnowflakeParser(parser.Parser):
+         **parser.Parser.PROPERTY_PARSERS,
+         "CREDENTIALS": lambda self: self._parse_credentials_property(),
+         "FILE_FORMAT": lambda self: self._parse_file_format_property(),
++        "HYBRID": lambda self: self.expression(exp.HybridProperty()),
+         "IGNORE": lambda self: self._parse_ignore_property(),
+         "INTERACTIVE": lambda self: self.expression(exp.InteractiveProperty()),
+         "LOCATION": lambda self: self._parse_location_property(),
+diff --git a/tests/dialects/test_snowflake.py b/tests/dialects/test_snowflake.py
+index bc290753a..dbdcf289c 100644
+--- a/tests/dialects/test_snowflake.py
++++ b/tests/dialects/test_snowflake.py
+@@ -4831,6 +4831,11 @@ class TestSnowflake(Validator):
+             "CREATE DYNAMIC TABLE dt TARGET_LAG='1 minute' WAREHOUSE=my_wh (id) AS SELECT * FROM bla",
+             "CREATE DYNAMIC TABLE dt (id) TARGET_LAG='1 minute' WAREHOUSE=my_wh AS SELECT * FROM bla",
+         )
++        create = self.validate_identity(
++            "CREATE HYBRID TABLE t (id INT PRIMARY KEY, customer INT)"
++        ).assert_is(exp.Create)
++        self.assertEqual(create.kind, "TABLE")
++        self.assertIsInstance(create.find(exp.HybridProperty), exp.HybridProperty)
+         create = self.validate_identity(
+             "CREATE INTERACTIVE TABLE t CLUSTER BY (a) AS SELECT a FROM s"
+         ).assert_is(exp.Create)
