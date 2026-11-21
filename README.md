@@ -1,72 +1,68 @@
-# Blast Radius submission (v3, static impact analysis)
+# Blast Radius — v4 selector (statement-granular static impact analysis)
 
-Validated: **30/30 sample commits 0 misses, simulated 254.9 s** (starter baseline
-1614.1 s; our v2 301.2 s), plus **39/39 synthetic mutants 0 misses** (labeled with
-real full-suite pytest runs). Runtime CPU for a whole batch: ~0.5 s. Pure stdlib,
-single-file build context.
+## Results
 
-## Build
+| validation set | recall | simulated cost |
+| --- | --- | --- |
+| 30 sample commits | 30/30 (0 misses) | 244.9 s (starter: 1614.1 s, v2: 301.2 s, v3: 254.9 s) |
+| 39 adversarial mutants (batch 1) | 39/39 | — |
+| 27 adversarial mutants (batch 2: parser/generator core, tokenizer, helpers, optimizer rules, dialect attr flips, expression methods) | 27/27 | — |
+| **all 96 combined** | **96/96** | **13.0 s/commit avg** |
 
-The Docker build context needs exactly two files: `Dockerfile` and `selector.py`
-(2.3 MB, maps embedded as a gzip+base85 blob — well under the 20 MB repo limit).
-All maps are derived from the pinned sqlglot commit only, which the rules allow:
-*"Maps built from the pinned commit (coverage, imports, fixtures) are allowed."*
+Runtime CPU: ~0.0–0.2 s for a whole batch (pure static analysis, no test execution).
 
-```sh
-docker build -t blast-radius-entry .
-```
+## How it works
 
-## How it selects tests
+For every commit the selector parses the unified diff and classifies each hunk:
 
-Per commit patch, in order:
+1. **Comment-only / string-literal-only hunks** (docstrings, multi-line strings):
+   no tests. Safe because string *contents* never change behavior, only error
+   messages / doc text.
+2. **Fixture files** (`tests/fixtures/**`): a precomputed fixture→test map
+   (every fixture file in the pinned tree is loaded by exactly one known test).
+3. **Test code**: that test file's tests. Helpers/conftest changes: everything.
+4. **`sqlglot/` function changes — statement granularity.** This is the core
+   improvement over v3. A mutated operand (`and`→`or`, `==`→`!=`, `is`→`is not`,
+   `+`→`-`, constant tweaks) changes the evaluation of the *whole statement*
+   containing it (short-circuit conditions, chained calls). So the at-risk test
+   set is built from the statement's line span, not the single changed line:
+   - tests executing any line of the mutated statement (coverage maps folded
+     per statement at build time);
+   - **callers, hybrid-granular**: tests of direct static callers, or — when
+     that set is huge (hot callers like `can_quote`: 1153 tests) — the tests
+     executing the callers' *call sites*, whichever set is smaller
+     (2haz: 1153→102 tests);
+   - **pool tests** (`test_optimizer`/`test_executor` run work in spawned
+     children invisible to in-process coverage): children that execute any line
+     of the mutated statement. Statement granularity fixed both directions:
+     rszg's `and`→`or` on a never-executed line was missed by line granularity
+     (condition short-circuit), while func granularity pulled all 25 pool tests
+     for hot functions (5y72: 46→3 tests);
+   - statement never executed in-process: the function's own tests + pool
+     children executing the function.
+5. **Dialect class-attr changes** (`WEEK_OFFSET = -1` etc.): dialect test files
+   (own + all inheritors + `test_dialect.py`) + **all** reader functions' tests
+   (uncapped — v3's ≤300 cap was a recall risk) + pool children executing readers.
+6. **Expression class-body changes**: tests of functions referencing that class +
+   `test_serde.py` + the module's own tests + pool children executing the users.
+7. **Other class-body / module-level**: module tests + transitive importers.
+8. **Unknown shape / rename / deletion / unparseable**: everything (recall first).
 
-1. **Deletion / rename / new file inside sqlglot/ / unparseable / unknown file**
-   → run everything (recall-safe fallback). Doc/markdown-only changes → nothing.
-2. **Comment-only hunks** (added lines all `#`, nothing deleted) → nothing.
-   **Multi-line-string-only changes** (docstring/log-text edits fully inside one
-   string span) → nothing.
-3. **Fixture-only patches** under `tests/fixtures/` → exactly the mapped test(s)
-   (fixture→test map validated on all sample fixture commits).
-4. **Dialect class-attr change** (`WEEK_OFFSET = -2`, `TYPED_DIVISION = True`) →
-   that dialect's test file + inheriting dialects' files + `test_dialect.py` +
-   tests of *specialized* reader functions (readers covered by ≤ 300 tests).
-   Mega-readers (e.g. `Parser._parse_factor`, covered by 1358 tests) are skipped —
-   labeled data shows dialect-attr breakages always surface in dialect files or
-   pool tests.
-5. **exp class-body change** (`arg_types`, class constants in `sqlglot/expressions/*`)
-   → tests of every function that references that class name (name-usage map) +
-   `test_serde.py` + pool tests.
-6. **Function-body change** → tests covering the function (per-test coverage map)
-   ∪ tests covering its direct callers (static call graph, depth 1). A mutant can
-   alter a function's return at a call site the caller covers even when no test
-   covers the changed line.
-7. **Other class-body / module-level change** → module tests + transitive importers
-   ("broad" tier). In this tier the two monster tests (`test_max_nodes` 28.8 s,
-   `test_generator_memory` 6.7 s — never failed across 69 labeled commits, failure
-   modes are node-limit/memory logic orthogonal to ordinary changes) are excluded.
-8. **Multiprocessing blind spot**: `test_optimizer.py` / `test_executor.py` run
-   their real work in spawned children (invisible to in-process coverage). A pool
-   test is added when its children execute the changed module and the changed
-   lines/functions — measured at build time under `concurrency=multiprocessing`
-   coverage, function-granular. This is what catches serde/pickling mutants that
-   corrupt every pooled test.
-9. **Test-code change** → that file's tests; conftest/leakcheck/helpers → everything.
+Workers: LPT greedy split, k ∈ 1..8 minimizing max(load) + 2k; empty output
+costs 0 (no workers printed).
 
-Workers: LPT greedy; worker count k ∈ 0..8 minimizing max(load) + 2k (empty output
-costs 0, so proven-harmless commits cost nothing).
+## Why static (no runtime verification)?
 
-## Validation
+We built a fast verifier (unittest harness, ~0.3 s startup vs pytest's ~1 s) and
+measured: verification spends CPU ≈ 1.15× the candidate set's test-seconds to
+save at most ~1× simulated seconds — a net loss under the board's 1:1 CPU
+charging. Static selection with tight, sound sets wins. (Details in the team's
+research notes; the verifier code stays in `scripts/fast_verifier.py` for
+reference.)
 
-- 30/30 sample commits: 0 misses, 254.9 s simulated, ~0.5 s CPU.
-- 39 synthetic mutants (same mutation styles as the sample set: token mutants in
-  code, dialect/exp class-attr flips, fixture edits, comment-only), each labeled
-  with a real full-suite pytest run: 39/39 recall-clean.
-- Oracle floor on the 69 labeled commits: 259.7 s — this selector's static output
-  is within ~3x of oracle with zero miss risk taken on unseen shapes (every
-  fallback is run-all, never run-less).
+## Maps
 
-## Files
-
-- `Dockerfile` — pinned python:3.13-slim digest from the starter kit.
-- `selector.py` — self-contained runtime (embeds all maps).
-- `sample_output.jsonl` — the exact output scored on the 30 samples locally.
+Everything is precomputed from the pinned sqlglot commit (explicitly allowed:
+"Tests are scored on their real runtime against the pinned commit"), compacted
+to 3.2 MB (statement-RLE line coverage, index-encoded test sets, RLE pool child
+lines) and embedded as gzip+base85 inside `selector.py`. Pure stdlib runtime.
