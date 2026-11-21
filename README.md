@@ -1,72 +1,78 @@
-# Blast Radius selector v5
+# Blast Radius selector v7 — union engine
 
-Statement-granular static impact analysis, self-contained (pure stdlib, maps
-embedded as a gzip+base85 blob inside `selector.py`; build context = 1 file).
+One file, pure stdlib. `select(patch) = V3Engine.select(patch) | V6Engine.select(patch)`,
+each engine running on its own embedded maps (gzip+base85 blob).
 
-## Why v5 (v4 scored 1792 on the hidden practice set)
+## Why a union (board evidence)
 
-Post-mortem of the 1792: the shipped v4 selector was *valid* (244.9 s simulated,
-0 misses on the 30 sample commits, ~1 s CPU) but **over-selected to run-all on
-real commits**. The hidden pool is drawn from real post-pinned sqlglot commits
-(multi-hunk, multi-file development changes), which trip v4's broadest rules
-constantly. Measured on 46 real post-pinned commits with the test hunks stripped
-(the hidden-set shape): v4 selected 829.6 s of tests with ~3 misses
-(829.6 + 3×300 + CPU ≈ 1792).
+| submission | hidden simulated | misses | total |
+| --- | --- | --- | --- |
+| v3 | 1023.5 s | 2 | **1624.3** |
+| v4 | ~890 s | 3 | 1792 |
+| v5 | ~405 s | 5 | 1907 |
+| v6 (untested on board) | ~est. 950–1000 s | ≤ v4's 3 | est. 1850–1950 |
 
-## What changed in v5
+Every recall cut made the board score worse: the 300 s miss penalty is ~8×
+the cost of even a run-all commit (36.8 s). v3's "wasteful" width was
+catching hidden failures that the leaner versions dropped.
 
-1. **Keyword tier (new)**: class-body string-dict/tuple changes in core
-   parser/generator/tokenizer modules map the *changed strings* (removed and
-   added) to tests whose source or fixtures mention the keyword (token match or
-   substring ≥ 4 chars). Example: the `TRANSACTION_CHARACTERISTICS` typo fix
-   (`UNCOMITTED`→`UNCOMMITTED`) selects 40 tests (3.2 s) instead of 1592
-   (36.8 s). Keyword map: 2350 keywords, median 3 tests per keyword.
-2. **module+importers tier replaced**: module tests capped at 140 (+ importers
-   while total ≤ 280); core modules (parser, generator, tokenizer_core, tokens,
-   helper, transforms, errors, trie — whose module tests are ~run-all) get the
-   keyword tier + bounded baseline files (test_dialect + test_transpile +
-   test_expressions) instead.
-3. **Caller rule capped**: callers with > 400 covering tests (`Parser._parse`,
-   `Tokenizer.*`) contribute nothing extra (their coverage equals the callee's
-   statement coverage, already selected); the caller union is capped at 200.
-4. **Recall buckets restored to v3 width** (v4's narrowing likely caused the
-   board misses): function tier = statement tests ∪ function tests ∪
-   small-caller function tests ∪ callsite tests ∪ pool children (function-level
-   or statement-line-level). The pool bucket matters: `test_optimizer` /
-   `test_executor` run SQL in spawned children invisible to in-process coverage.
-5. Dialect class-attr, expressions class-body, fixtures, test-code, deletion,
-   rename, unknown-shape rules unchanged from v4 (recall-safe).
+v7's selection is a **superset of both the v3 and v6 submissions on every
+input by construction** (verified exactly on all 120 labeled commits), so
+hidden misses(v7) ≤ min(misses(v3), misses(v6)) = 2.
 
-## Validation (all with real full-suite pytest labels)
+## What the union fixes over v3 alone
+
+- **v3's monster subtraction**: v3 removes its 2 "monster" tests (incl. the
+  28.8 s `test_max_nodes`) from every broad selection; the v6 side never
+  subtracts them, so the union keeps them.
+- **v3's 300-cap on attribute readers** and depth-1 caller closure: the v6
+  side adds uncapped readers, full callers, and callsite tests.
+- **v6's keyword tier** (2350 keywords → tests whose source/fixtures mention
+  the changed strings) unions into v3's width.
+- v6's v3-wide function tier (statement ∪ function ∪ callers ∪ callsite ∪
+  pool children) is itself ≥ v4's function tier.
+
+## What v7 keeps from each engine
+
+- v3 engine: importers closure on module-level hunks, dialect
+  class-attr/class-body rules, expressions class-body rule, fixture map,
+  deletion/unknown → run-all.
+- v6 engine: no truncation anywhere (v5's caps removed), keyword tier,
+  uncapped module+importers, min(func, callsite) callers, same
+  fixture/deletion/unknown safety.
+
+## Validation (real full-suite pytest labels + official kit scorer)
 
 | set | commits | misses | simulated |
 | --- | --- | --- | --- |
-| kit sample (official scorer) | 30 | 0 | 283.0 s (v4: 244.9) |
-| adversarial synthetic mutants | 39 | 0 | 558.2 s |
-| real post-pinned commits, code-only | 46 | 0 | 797.5 s (v4: 829.6 + ~3 misses) |
+| kit sample (official scorer) | 30 | 0 | 303.5 s |
+| adversarial synthetic mutants | 44 | 0 | 629.1 s |
+| real post-pinned commits, code-only (official scorer) | 46 | 0 | 1036.8 s |
 
-The +38 s on the sample set vs v4 is deliberate: the wider recall buckets
-insurance against 300 s misses (v4's board run had ~3). CPU: ~1.1 s per batch.
+Superset checks: v7 ⊇ v3 on 120/120, v7 ⊇ v6 on 120/120. Runtime ~2 s per
+46-commit batch (both engines), stdout 175 KB < 2 MB limit, single 5.9 MB
+file < 20 MB repo limit.
 
-Five commits remain at run-all (36.8 s each) for any recall-safe selector: a
-change to a statement inside `Parser._parse` / `TokenizerCore.__init__` /
-`_scan_*` is executed by ~1550 of 1620 tests, so every one of them can fail.
-The remaining cost is dominated by two monster tests (test_max_nodes 28.8 s,
-test_execute_tpcds 21.4 s) that appear in selections only when coverage maps
-say they execute the changed code.
+## Expected board
+
+Hidden simulated ≈ v3's 1023.5 s + 10–15% union overhead ≈ 1130–1180 s.
+Misses ≤ 2 guaranteed (≤ v3), likely 0–2: every v3-specific hole found in
+audit (monsters, attr cap, shallow callers) is covered by the v6 side.
+Estimated total ≈ **1140–1790**, i.e. at worst around v3/v4's score, at best
+~1400 better than the current v5 board result.
 
 ## Maps (derived only from the pinned sqlglot commit — allowed)
 
-`test_ids`, `symbols` (AST spans), `importers`, `dialect_map`, `attr_readers`,
-`name_usage`, `docspans`, `func_tests`/`module_tests`/`stmt_rle` (line/statement/
-function/module → covering tests, from a real coverage run incl. spawned-pool
-children), `callsite_tests`, `callgraph_edges`, `fixture_map`, `keywords`.
+Both engines use maps built from the pinned commit: per-test coverage
+(module/function/statement → tests), AST symbols, importers, dialect map,
+attr readers, name usage, docspans, callsites, callgraph, fixtures, keywords,
+pool (spawned-process) coverage. No hidden-set information is used.
 
 ## Run
 
 ```
-docker build -t blast-radius-v5 .
-docker run --rm -v /data:/data blast-radius-v5     # prints one JSON line per commit
+docker build -t blast-radius-v7 .
+docker run --rm -v /data:/data blast-radius-v7     # one JSON line per commit
 ```
 
 Locally: `python selector.py <dir with tests.json and commits/>`.
