@@ -56162,7 +56162,273 @@ _MAPS_BLOB6 = (
 
 )
 MAPS6 = json.loads(gzip.decompress(base64.b85decode(_MAPS_BLOB6)))
+_MAPS_BLOB9 = (
+    "ABzY8DWn2x0{`t=OONBY5&kc87Iyi5%q<9#AV3lz*u5<l4Uetv*0e2oWO;Tv!T$GrMHVI5Ex9i-kN|V(CZ!@-tmjuH|NFyf="
+    "ugK@d;0M4-ycq2_D}n6`0?SPX`A8U;fLevhmXJfqAFL3U#nkys6tGm7%M4d8cL%pX)}TJcpho|Yc+1RX}k9I(EO|B-L$E&B#"
+    "|pyNgXfAcg<#BZ->(Y6KaKWGd$PrhUuiOtXLuB!AR-AxvwNxG1gXw<}~)cGC}8YaFvN7kE6zzX&?bBR2o}BN5(wXy0SXcSZg"
+    "ZF`&)<SkY5@HSy|rSVt)ro(%4ClJLcz3#mebS?~JURWg6`1m``Ux<M_G5bKc)!f5-bf+CQ2+j=u6DKlj2_9->NP87i;xT|89"
+    "cHIFsMhG`6FY`&w1BD~M%dT%NpvV1(w^pV#_tc{tUAY>Ip-Y4LGL1mc)$UIo4!99XAJoZ)adC%ZM?=yXbyrVEY_84b=qQrB_"
+    "&mqIecZs-5R7`_AMb=A%$wia-mjX(aQiN=f5?96_SE;u%g=<J9nNmTpQbD3=rX`NiioL)&Fz+Cl>=Q5vNpeiHps`EPk!Q3^i"
+    "2N=}P)3<|QCL%{<WV$JxU5n#JC3qORLa^s(*j<pMKmi`|G4?oH``+L8l=~RkB{YTm07{jal8z;zgkiEeb=9OjVDcKT2jdM?)"
+    "A5Ndmg&}+Mml&+E-SsEZKJLP=6c!RaHvx{VOe3*3|7+riVGkH#;Bu`gCf#b|JpV8^oW^&3;#pcZP>WHUyXs#j$J#xWCQM$y!"
+    "uVCF}?)%VSTvQu*r2R9dqV;ZQo{v4L?LzN#?@KrYi8Pr)e5+LGK%KFi|0_4zCt;rt@=<6xCeWg2G?T$ncphjOel4~O!C$1q^"
+    "84O;-lF7x1Bgp=nz0|H23GbBe2Ci6zl7})_L0&sMJGX-o~upp!`a8m(aPzy8MLJF^nSRMH#=NKtzrpt_+SC%9qAq6R|;F%?#"
+    "wSHZd+paIE2s&YrONx1X^`u5qvKtO&F-zDfZJ*tOT%37Dypk>!Z-=`SUk6QK8j6dNO#ty;DIR0b(KHbMlxGXaTE)qhqKsm-Y"
+    "nX<Xp3Mg)!!pq@G0hUu;8(LeG-9@POanf(&v((_O9vi<H_hg3V46l49*4?EHbcZ$!&)TMG|az&c^T%xz$D3B(-`+MF3Z6{HY"
+    "Q}A4b0PUXt6?6R%ZEF>}}bNEMm6hJuPw|1-mqc>@7!C3v+bLrvsmk-Nj*@V>$Q$^$Nje>yUSfjZk8hrf8dH8ah{RXXG(ZuVg"
+    "nyVo@c^D-x3`ZmQ_=${5dDg{qa4mURgugEAFs6OUEYMYl-iP%u+QSiKhPzM9-d3teUqgBENnT97gYTZksJ)Y%4CtbVr{HpA<"
+    "&E)k4ky5yLlEg1$I3^+HUC>qMrH=^Qhw=bX$rf6;u9tt7C1xKNn+?}&2c^S(9+E<nXBrILCS8CjRVp2|)3Hl;;;|ZbJbv_=?"
+    "?RKD12>`I1uulHvT=%bI;)G`xn<2Ac;St_d(kujeQZw@o)SylALS*1Dy9Z+rgJ5km18vB{v-f!DIE?s&gr?Z0rGjXXdpJ@lf"
+    "@H9+f=CEkj}eWcqArMpoLOeY(u^RgVM~$(S`j`uDmu8iBpjM&6aZa`bPh{kMI7rq99eqhOC3OAFcy?Uz%G<%mIR}UH^7j|rx"
+    "@30@*-_-SQ5&WrhO_pnMGj|hPo~$p6a&lH-H7jOc9~7@Q6WGU<>gs6w4zJWDI~YD)}x{jz8>Y8oX=GF&*`SprS!0N=InXWh-"
+    "9d02rcqx-cje5(_ENm{`3@TC=6QzCJWv0UrU-cb)XSec62~XAs;MoM5GykP2m96DNenN<}<_0dpFG2uA0Fm*_AH=WJ#cVswJ"
+    "TEu7gGWPm*aqlXA}Ms{3DC>7bfq;5|$Um!IZn_|2o2_#7^76CQ|ELnnqq(F>6u_SED-oBtPFrtLZ5MEKd1d#T5CP{OYtn-XA"
+    "uB1pk&Eh!Ivl;mx{_viPV5w5&9Vt{9HXenzq*97cGYa(zlFTzYf!sCEVsZ-JQ_~4r$TGv86bkc<PSCng(ox!!8QqUkxyri4f"
+    "bvpKNrF_%=@vYBQgkUNY$_+1(jn|C$IhXs+Ei3(<{3%CvGx^}Hu%FZf;<R+TuE19maZt}>H^ucf_gL|VfA)q0>w&(Bidm*?F"
+    "z{8P&xj@68I7ADSo7aoGNEi(5@vmtVs7;c9Z(s=G5)SPJm(HzD#^kLB%(P!i@5{`C7mwcn#}rdU(adLK&!tcB`}${f2JLL&@"
+    "4R+M(*6<7%$%<?1GVy*oWOkENK(z|gFcpW5!X$NlDIybYlKI)|s@rhidm&_Prdah-VBpnlxGlq5_rmh(M)SNp3wJlFeUT>>~"
+    "Ph|xGP#KBCYGQ9+mYOE6=rLitZWo*Ia)TLr$C&$$VnE_!)J;T<Fybu&MJBP+TC3_o{?2nO0NIjzq&Oe{J_P80I$83dQd<{4D"
+    "O<QlC>QQvK3MWyEcx~mp+S6RgA<wW7Na-$S&&idXo5o7;7?qp|JPxVtlg9Y(IjYeAOh03-I}Q!??fUmi<%x9DwjGdW{V)fca"
+    "4(j<gZ$jJhNsnAY8E!z&3<YZN}a3zcj>|7Q1|U-|Ils@6V5f2US+o4W6%<}+hM*!h4)u{?wWRf2-_U><F0Y|((=>!6M=zd2F"
+    "NR2>=Q;1SMQwtVO$0qUlr%)?o0xiB*~Q{8U5-N4|V^vz#myhX$@3Th=uZ%(gqhtlqNV!Q2NrcxDq7A_`(8zSO%}aO~6i$OE^"
+    "_I#vN3DxdMdAinx>|Q0%#F7JzAjUKLl{^@j_4az$4#L#|5UMY6Ogu+!KGNbpj>yYoY{tJ|S@Y$mmUCui3dmeHjRQD2aKq;g}"
+    "4#1%vWi^jjVV+oU#HQC`}6;~NKo=?xa?zi><8D<AJnw)^bA6sL}jVv6<>xN~{w(CCE7ljrTKwP7tplA8(%I9YkkV~;laEi^;"
+    "AebB0g+;Ei>mvPfh9(|gCz$WeJERZWZht<E3?f%JKjVN=j8_CW*!~ovn4gzPPQG`@u=%u~go@I7H8dc{cl)oS1|cvmNT_0-H"
+    "F>n3m638LCr(6A(b!<245C);_q6SfV<${joYhi!#$7S$K#eu5AjgqYUCyNhb)YoYtvOS2Z42ROr?2vQ0&!EL6XC#ct#7FDP@"
+    "0>Pn!?-}N?%kM)*%H>O;0~|gL26595Uc~TzXKW({nR}N)xX#5BZA$H!IUu0*(VXCzj5iAY-38kW~9h4n>lngp^^`A5YEUII~"
+    "A9i$^DXQi?Fb{GtGIBw{z~7VzzZqP|s@O8!PtFb_2yXWdeY$)R)!6!k}S=@L*4s7mjP8f*AdN<aEUlO?oxk8|4sdM+d@B!jC"
+    "(K!B$y{!rHDYo@}S+kz-Eu#o-C1FMu4q%&h{5;YW6O{H#8hCHEkqEQDyi)?Oz+8RM~10Yyv4u8xNU#B0p`)2#{+?`Lw<n!k?"
+    "u}nR~@ri#cm+9s(-cd0e-7?{^I}K0$6bhg@#qO)Yguc$lW!*InCvPkAqvEUNTQlWbD#O$Y8wsdSUrJZWzU-S}%$TVOx+2y$V"
+    "BV6n{4(({6PBRw6rAxTHE?-MzGAQ0+5=XO#+AM<ToRnN&-Gz5%C;)OP*ogV=#wS4CiIw7$uVTfuVza7R5$Qvja1K<UM=J>8g"
+    "Hr<N*7O5MwC7|btZGce=$aMHIe(+V9;`QrIc2>Z5Gkias;G0+i{P~!&W>;Ob@6M<drTU+g&~77?vbX3|Gh(Zas(9uE34!WI1"
+    "#%bxQ%@VfL{^Qq44PK0-=L>v_9ThJ}4b%b@1@WrZ>HoA&ew7&X!$sp-;|96z>DkQ`gAh!Vwd^2cqC3}DBb((I?wn}a5-B``u"
+    "QACt!vP>Mrp6i8u8FpU&GuTk}Y@HaV5`Q(9IbCuCi_cZO(o3EYJB<37h>E$I?{XzPj1RIPgJ#$#X46<IwZQf@oWH5-Lk0v9s"
+    "bR}C*500~g;5H;>C&9nvsB$=$%UoZU{<!9)?{8t9!}&NXL6VL9UVRuSvuyX>>D<@!;}e>nrmxoN^~Dc17AdCRepHL^=R#ekx"
+    "J(SoH1zd^T0l9>t<ikD@v`fiTWiPu?%MlizrXeR-0W_=9$Ug|@7o)9pE_mB@2BS2^81oXm){;xbo9+wpsf&<EW7-=>o?o|jp"
+    "fJYh=TUD9d2o8o}gDK#x~sA`&&%T`)?~0%?S?m+vb+Ih+<D{^tXuS0bqrs+xIu#7L>5^dPD~+@8_6cnIzRkoAV8Vy5Er3-Js"
+    "~3_J%eJ*7&u&zUZ6$U&oRuD1Hw%--FHfVDrBdY|2|4_kxmSdvPx|@ccWqH!m(eRbRZBe@3`?anbd=crz8_7mvq6;o@mR;m0N"
+    "$H6gRU-t6Ej$JtMUw?F><5C8b<pa1mJ&p$Nn6hDiG5($=n{P;7T{PfSi{RI#H`0-;7oAlc`nB<}RTAv=ePcVmis3C~~#R2sQ"
+    "ub6yiyIueK(4SM!68HJ9Y+3J`WFx@rFsJ?gCbM&Fdwk_q=MO`7*ngMH0_OiNk=3g3!U+?>c<j$<%7?Zc1@v>f+q4uw%8y|l4"
+    ")u`2)`$0M$vYl&-B!EfQJ28!zDLb|M03YurY_?h51F+n?|8~(fAgLP&3+7V$73#kE^)_$uDUh%JZb9v-uo1F|6^ty>N_4Y+`"
+    ")H#|NTE|)c;3zH2?q"
+)
+MAPS9 = json.loads(gzip.decompress(base64.b85decode(_MAPS_BLOB9)))
+STRSPANS = {k: [tuple(s) for s in v] for k, v in MAPS9["strspans"].items()}
+_STRSPAN_MOD2PATH = {k[:-3].replace("/", "."): k for k in STRSPANS}
+TEST_CLOSURE = MAPS9["test_closure"]
+READ_MAP = MAPS9["read_map"]
+
 TEST_IDS6 = MAPS6["test_ids"]
+
+
+# ---------------- v9 shared patch layer (fixes 1, 2, 3, 6) ----------------
+
+_RE_HUNK9 = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def _unquote_git_path(p):
+    if len(p) >= 2 and p[0] == '"' and p[-1] == '"':
+        p = p[1:-1]
+        try:
+            p = p.encode("latin-1", "backslashreplace").decode("unicode_escape")
+        except Exception:
+            pass
+    return p
+
+
+def _strip_ab(p):
+    p = _unquote_git_path(p.split("\t")[0])
+    if p.startswith("a/") or p.startswith("b/"):
+        return p[2:]
+    return p
+
+
+def parse_diff9(text):
+    """Parse a git unified diff including rename/mode/binary headers.
+
+    Returns (files, run_all):
+      files: {(kind, path): [hunk, ...]} where hunk = {"old_start": int,
+      "lines": [(tag, text)], "add_runs": [old_line_anchor, ...]} and kind is
+      "new" or "del". Hunks carry the true old-file anchor of every '+'
+      run (fix 3): the last old line before the run (0 = insert at top).
+      run_all: True when a tracked source/test file is renamed, mode-changed,
+      or binary-changed (fix 6), or when the diff is malformed.
+    """
+    files = {}
+    cur_new, cur_old, hunk = None, None, None
+    meta = {"rename": False, "mode": False, "binary": False}
+    run_all = False
+    saw_plus = False
+    for line in text.splitlines():
+        if line.startswith("+++ "):
+            p = _strip_ab(line[4:])
+            cur_new = None if p == "/dev/null" else p
+            saw_plus = True
+            hunk = None
+            files.setdefault(("new" if cur_new else "del", cur_new or cur_old), [])
+        elif line.startswith("--- "):
+            cur_old = _strip_ab(line[4:])
+        elif line.startswith("diff --git "):
+            hunk = None
+            if not saw_plus:
+                # pure rename/mode/binary file: no ---/+++ section follows
+                mid = line[11:]
+                a = mid.split(" b/", 1)[0][2:] if " b/" in mid else ""
+                b = mid.rsplit(" b/", 1)[1] if " b/" in mid else ""
+                a, b = _strip_ab(a), _strip_ab(b)
+                files.setdefault(("new", b or a), [])
+        elif line.startswith("@@ ") and cur_new:
+            mm = _RE_HUNK9.match(line)
+            if mm is None:
+                hunk = None
+                run_all = True
+                continue
+            hunk = {"old_start": int(mm.group(1)), "old_count": int(mm.group(2) or 1),
+                    "lines": [], "add_runs": []}
+            files[("new", cur_new)].append(hunk)
+        elif line.startswith("rename from ") or line.startswith("rename to "):
+            meta["rename"] = True
+        elif line.startswith(("old mode ", "new mode ")):
+            meta["mode"] = True
+        elif line.startswith("Binary files "):
+            meta["binary"] = True
+        elif hunk is not None and line[:1] in (" ", "+", "-"):
+            if line[0] == "+":
+                if not hunk["lines"] or hunk["lines"][-1][0] != "+":
+                    # slot = the old-file line the first new line occupies:
+                    # old_start + context before the run (deleted lines do
+                    # NOT advance it - the run replaces them); an empty old
+                    # range "@@ -N,0" means the insert sits after line N.
+                    slot = hunk["old_start"] + sum(
+                        1 for t, _ in hunk["lines"] if t == " ")
+                    if hunk["old_count"] == 0:
+                        slot = hunk["old_start"] + 1 if hunk["old_start"] else 1
+                    hunk["add_runs"].append(slot)
+                hunk["lines"].append(("+", line[1:]))
+            else:
+                hunk["lines"].append((line[0], line[1:]))
+        elif line[:1] in ("+", "-") and not line.startswith(("+++", "---")):
+            run_all = True
+    if meta["rename"] or meta["mode"] or meta["binary"]:
+        run_all = True
+    return files, run_all
+
+
+
+def comment_orphan_floor(mod, dialect_classes, file_tests):
+    """Bounded floor for comment-only hunks whose enclosing scope is an
+    attribution orphan (no tests, no callers): the module's own dialect
+    test file (by dialect class or module name), else the root dialect
+    test file. Returns test ids."""
+    own = [c for c, m in dialect_classes.items() if m == mod]
+    paths = [f"tests/dialects/test_{c.lower()}.py" for c in own]
+    if not paths:
+        tail = mod.rsplit(".", 1)[-1]
+        cand = f"tests/dialects/test_{tail}.py"
+        paths = [cand] if cand in file_tests else ["tests/dialects/test_dialect.py"]
+    out = set()
+    for pth in paths:
+        out.update(file_tests.get(pth, ()))
+    return out
+
+def hunk_ranges9(hunk):
+    """[(lo, hi)] old-file ranges touched: every '-' line and every '+'
+    run anchor. A pure-add hunk with old_count==0 at the very top yields
+    [(0, 0)] (insert before line 1)."""
+    ranges = []
+    oldno = hunk["old_start"]
+    dels = []
+    for t, _ in hunk["lines"]:
+        if t == " ":
+            oldno += 1
+        elif t == "-":
+            dels.append(oldno)
+            oldno += 1
+    if dels:
+        ranges.append((min(dels), max(dels)))
+    for a in hunk["add_runs"]:
+        ranges.append((a, a))
+    if not ranges:
+        ranges.append((hunk["old_start"] - 1, hunk["old_start"]))
+    return ranges
+
+
+def hunk_comment_only9(hunk):
+    adds = [l for t, l in hunk["lines"] if t == "+"]
+    dels = [t for t, _ in hunk["lines"] if t == "-"]
+    if dels or not adds:
+        return False
+    ok = lambda s: (not s.strip()) or s.lstrip().startswith("#")
+    return all(ok(l) for l in adds)
+
+
+def in_strspan(path, lo, hi):
+    """True if [lo, hi] intersects a multi-line string-literal span of path."""
+    path = STRSPANS.get(path) and path or _STRSPAN_MOD2PATH.get(path, path)
+    for s, e, _cls in STRSPANS.get(path, ()):
+        if s <= hi and lo <= e:
+            return True
+    return False
+
+
+def hunk_string_only9(path, hunk):
+    """Docstring/noop-string-only edit (safe to skip). Requires EVERY changed
+    line, deleted and added, to sit inside a class-0/1 span (fix 2). Added
+    lines must be pure string-text lines (no code) - enforced by the span
+    check on the add anchors and the plain-text check on the added content."""
+    dels = [l for t, l in hunk["lines"] if t == "-"]
+    if not dels:
+        return False
+    if not hunk["add_runs"] and not dels:
+        return False
+    # deleted lines must all be inside docstring/noop spans
+    oldno = hunk["old_start"]
+    del_lines = []
+    for t, l in hunk["lines"]:
+        if t == " ":
+            oldno += 1
+        elif t == "-":
+            del_lines.append((oldno, l))
+            oldno += 1
+    path = STRSPANS.get(path) and path or _STRSPAN_MOD2PATH.get(path, path)
+    spans = STRSPANS.get(path, ())
+    for ln, _l in del_lines:
+        hit = [(s, e) for s, e, cls in spans if cls in (0, 1) and s <= ln <= e]
+        if not hit:
+            return False
+        for s, e in hit:
+            if ln == s or ln == e:
+                # deleting a quote line breaks the literal: live
+                return False
+    # added lines must be string text: every add anchor inside a class-0/1 span
+    # and every added line must look like string content (no code that could
+    # be live): the anchor test alone is not enough for adds at the span edge.
+    adds = [l for t, l in hunk["lines"] if t == "+"]
+    for a in hunk["add_runs"]:
+        if not any(s <= a <= e for s, e, cls in spans if cls in (0, 1)):
+            return False
+    for l in adds:
+        st = l.strip()
+        if not st:
+            continue
+        # inside a docstring/noop span the add is string TEXT unless it
+        # terminates the literal early (a quote-triple anywhere in the
+        # line), which would turn the rest of the hunk into live code
+        if '"""' in l or "'''" in l:
+            return False
+    return True
+
+
+def comment_hunk_live9(path, hunk):
+    """A comment-only hunk whose adds fall inside a multi-line string span
+    is a live edit of that string (fix 1)."""
+    path = STRSPANS.get(path) and path or _STRSPAN_MOD2PATH.get(path, path)
+    for a in hunk["add_runs"]:
+        for s, e, _cls in STRSPANS.get(path, ()):
+            if s <= a <= e:
+                return True
+    return False
+
 
 class V3Engine:
     def __init__(self):
@@ -56201,48 +56467,18 @@ class V3Engine:
     # ---------- patch parsing (hardened) ----------
 
     def parse_diff(self, text):
-        files = {}
-        cur_new, cur_old, hunk = None, None, None
-        for line in text.splitlines():
-            if line.startswith("+++ "):
-                p = line[4:]
-                cur_new = p[2:] if p.startswith("b/") else p
-                if cur_new == "/dev/null":
-                    cur_new = None
-                files.setdefault(("new" if cur_new else "del", cur_new or cur_old), [])
-                hunk = None
-            elif line.startswith("--- "):
-                p = line[4:]
-                cur_old = p[2:] if p.startswith("a/") else p
-            elif line.startswith("@@ ") and cur_new:
-                m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
-                hunk = {"old_start": int(m.group(1)), "lines": []}
-                files[("new", cur_new)].append(hunk)
-            elif hunk is not None and line[:1] in (" ", "+", "-"):
-                hunk["lines"].append((line[0], line[1:]))
-        return files
+        return parse_diff9(text)[0]
 
     @staticmethod
     def hunk_old_range(hunk):
-        changed, oldno = [], hunk["old_start"]
-        for t, _ in hunk["lines"]:
-            if t == " ":
-                oldno += 1
-            elif t == "-":
-                changed.append(oldno)
-                oldno += 1
-        if not changed:
-            return hunk["old_start"] - 1, hunk["old_start"]
-        return min(changed), max(changed)
+        ranges = hunk_ranges9(hunk)
+        lo = min(r[0] for r in ranges)
+        hi = max(r[1] for r in ranges)
+        return lo, hi
 
     @staticmethod
     def hunk_comment_only(hunk):
-        adds = [l for t, l in hunk["lines"] if t == "+"]
-        dels = [t for t, _ in hunk["lines"] if t == "-"]
-        if dels or not adds:
-            return False
-        ok = lambda s: (not s.strip()) or s.lstrip().startswith("#")
-        return all(ok(l) for l in adds)
+        return hunk_comment_only9(hunk)
 
     @staticmethod
     def hunk_changed_attr(hunk):
@@ -56258,11 +56494,7 @@ class V3Engine:
         return target if target.isidentifier() else None
 
     def hunk_string_only(self, mod, hunk):
-        dels = [l for t, l in hunk["lines"] if t == "-"]
-        if not dels:
-            return False
-        lo, hi = self.hunk_old_range(hunk)
-        return any(s <= lo and hi <= e for s, e in self.docspans.get(mod, []))
+        return hunk_string_only9(mod, hunk)
 
     def enclosing(self, mod, lo, hi):
         entries = self.symbols.get(mod, [])
@@ -56313,6 +56545,10 @@ class V3Engine:
     def is_dialect_module(self, mod):
         return mod in self.dialect_classes.values()
 
+
+    def _comment_orphan_floor(self, mod):
+        return comment_orphan_floor(mod, self.dialect_classes, self._file_tests)
+
     def select(self, patch_text, tests_meta):
         all_ids = {t["id"] for t in tests_meta}
         self._file_tests = {}
@@ -56350,12 +56586,39 @@ class V3Engine:
                 if mod not in self.symbols:
                     return set(all_ids)
                 code_hunks = [h for h in hunks if not self.hunk_comment_only(h)]
-                if not code_hunks:
+                comment_plain = [h for h in hunks
+                                 if self.hunk_comment_only(h) and not comment_hunk_live9(mod, h)]
+                live_str_hunks = [h for h in hunks
+                                  if self.hunk_comment_only(h) and comment_hunk_live9(mod, h)]
+                if not code_hunks and not comment_plain and not live_str_hunks:
                     continue
-                if all(self.hunk_string_only(mod, h) for h in code_hunks):
+                if (all(self.hunk_string_only(mod, h) for h in code_hunks)
+                        and not comment_plain and not live_str_hunks):
                     continue
+                hunks_for_scope = code_hunks + live_str_hunks
+                if comment_plain:
+                    # fix 1: a comment-only hunk outside any string still
+                    # selects the enclosing scope, or the module floor
+                    mt = self.module_tests.get(mod, set())
+                    if len(mt) <= 60:
+                        tids |= mt
+                    else:
+                        before = len(tids)
+                        for h in comment_plain:
+                            ranges = hunk_ranges9(h)
+                            lo = max(1, min(r[0] for r in ranges))
+                            hi = max(r[1] for r in ranges)
+                            funcs, classes, mlines = self.enclosing(mod, lo, hi)
+                            for fn in funcs:
+                                tids.update(self.func_tests.get(f"{mod}:{fn['q']}", ()))
+                                for c in self.caller_closure(mod, fn["q"], 1):
+                                    tids.update(self.func_tests.get(c, ()))
+                        if len(tids) == before:
+                            # orphan floor: the enclosing scope has no
+                            # attributed tests -> bounded dialect-file set
+                            tids |= self._comment_orphan_floor(mod)
                 broad = False
-                for h in code_hunks:
+                for h in hunks_for_scope:
                     if self.hunk_string_only(mod, h):
                         continue
                     lo, hi = self.hunk_old_range(h)
@@ -56399,7 +56662,7 @@ class V3Engine:
                     if mod not in mods:
                         continue
                     touched = False
-                    for h in code_hunks:
+                    for h in hunks_for_scope:
                         if self.hunk_string_only(mod, h):
                             continue
                         lo, hi = self.hunk_old_range(h)
@@ -56517,30 +56780,9 @@ class V6Engine:
     # ---------- patch parsing (hardened, from v4) ----------
 
     def parse_diff(self, text):
-        files = {}
-        cur_new, cur_old, hunk = None, None, None
-        for line in text.splitlines():
-            if line.startswith("+++ "):
-                p = line[4:]
-                cur_new = p[2:] if p.startswith("b/") else p
-                if cur_new == "/dev/null":
-                    cur_new = None
-                files.setdefault(("new" if cur_new else "del", cur_new or cur_old), [])
-                hunk = None
-            elif line.startswith("--- "):
-                p = line[4:]
-                cur_old = p[2:] if p.startswith("a/") else p
-            elif line.startswith("@@ ") and cur_new:
-                mm = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
-                if mm is None:
-                    hunk = None
-                    continue
-                hunk = {"old_start": int(mm.group(1)), "lines": []}
-                files[("new", cur_new)].append(hunk)
-            elif hunk is not None and line[:1] in (" ", "+", "-"):
-                hunk["lines"].append((line[0], line[1:]))
-            elif line[:1] in ("+", "-") and not line.startswith(("+++", "---")):
-                self._malformed = True
+        files, run_all = parse_diff9(text)
+        if run_all:
+            self._malformed = True
         return files
 
     @staticmethod
@@ -56556,20 +56798,10 @@ class V6Engine:
 
     @staticmethod
     def hunk_comment_only(hunk):
-        adds = [l for t, l in hunk["lines"] if t == "+"]
-        dels = [t for t, _ in hunk["lines"] if t == "-"]
-        if dels or not adds:
-            return False
-        ok = lambda s: (not s.strip()) or s.lstrip().startswith("#")
-        return all(ok(l) for l in adds)
+        return hunk_comment_only9(hunk)
 
     def hunk_string_only(self, mod, hunk):
-        dels = [l for t, l in hunk["lines"] if t == "-"]
-        if not dels:
-            return False
-        d = self.hunk_dels(hunk)
-        lo, hi = min(d), max(d)
-        return any(s <= lo and hi <= e for s, e in self.docspans.get(mod, []))
+        return hunk_string_only9(mod, hunk)
 
     def enclosing(self, mod, lo, hi):
         entries = self.symbols.get(mod, [])
@@ -56655,6 +56887,12 @@ class V6Engine:
 
     # ---------- main selection ----------
 
+
+    def _comment_orphan_floor(self, mod):
+        ft = comment_orphan_floor(mod, self.dialect_classes, self._file_tests)
+        inv = {tid: i for i, tid in enumerate(TEST_IDS6)}
+        return sorted({inv[t] for t in ft if t in inv})
+
     def select(self, patch_text, tests_meta):
         all_ids = {t["id"] for t in tests_meta}
         self._file_tests = {}
@@ -56694,18 +56932,44 @@ class V6Engine:
                 if mod not in self.symbols:
                     return set(all_ids)
                 code_hunks = [h for h in hunks if not self.hunk_comment_only(h)]
-                if not code_hunks:
+                comment_plain = [h for h in hunks
+                                 if self.hunk_comment_only(h) and not comment_hunk_live9(mod, h)]
+                live_str_hunks = [h for h in hunks
+                                  if self.hunk_comment_only(h) and comment_hunk_live9(mod, h)]
+                if not code_hunks and not comment_plain and not live_str_hunks:
                     continue
                 code_hunks = [h for h in code_hunks if not self.hunk_string_only(mod, h)]
-                if not code_hunks:
+                hunks_for_scope = code_hunks + live_str_hunks
+                if not hunks_for_scope and not comment_plain:
                     continue
-                for h in code_hunks:
-                    dels = self.hunk_dels(h)
-                    if not dels:
-                        lo = hi = h["old_start"]
-                        lo = max(1, lo - 1)
+                if comment_plain:
+                    # fix 1: comment-only outside strings still selects the
+                    # module floor (<= 60 tests) or the enclosing scope
+                    mt = self.module_tests.get(mod, ())
+                    if len(mt) <= 60:
+                        pool_ids.update(mt)
+                        tids.update(TEST_IDS6[i] for i in mt)
                     else:
-                        lo, hi = min(dels), max(dels)
+                        before = len(tids)
+                        for h in comment_plain:
+                            ranges = hunk_ranges9(h)
+                            lo = max(1, min(r[0] for r in ranges))
+                            hi = max(r[1] for r in ranges)
+                            funcs, classes, mlines = self.enclosing(mod, lo, hi)
+                            for fn in funcs:
+                                tids.update(TEST_IDS6[i] for i in self.func_tests.get(f"{mod}:{fn['q']}", ()))
+                                for c in self.callers.get(f"{mod}:{fn['q']}", ()):
+                                    tids.update(TEST_IDS6[i] for i in self.func_tests.get(c, ()))
+                        if len(tids) == before:
+                            # orphan floor: bounded dialect-file set
+                            for i in self._comment_orphan_floor(mod):
+                                tids.add(TEST_IDS6[i])
+                for h in hunks_for_scope:
+                    dels = self.hunk_dels(h)
+                    ranges = hunk_ranges9(h)
+                    lo = min(r[0] for r in ranges)
+                    hi = max(r[1] for r in ranges)
+                    lo = max(1, lo)
                     funcs, classes, mlines = self.enclosing(mod, lo, hi)
 
                     # ---- class-attr / class-body / module-level ----
@@ -56875,22 +57139,59 @@ class Selector:
 
     def select(self, patch_text, tests_meta):
         sel = self.v3.select(patch_text, tests_meta) | self.v6.select(patch_text, tests_meta)
-        files = self.v6.parse_diff(patch_text)
-        if not files:
-            return set(t["id"] for t in tests_meta)
+        files, run_all = parse_diff9(patch_text)
+        all_ids = set(t["id"] for t in tests_meta)
+        if run_all or not files:
+            return all_ids
+        # per-file map for the closure/read floors
+        file_tests = {}
+        for t in tests_meta:
+            file_tests.setdefault(t["file"], set()).add(t["id"])
+        changed_paths = [path for (_kind, path) in files.keys()]
         for (kind, path), hunks in files.items():
-            if not path.startswith("sqlglot/") or not path.endswith(".py"):
-                continue
-            mod = path[:-3].replace("/", ".")
-            live = [h for h in hunks
-                    if not self.v6.hunk_comment_only(h)
-                    and not (mod in MAPS6["docspans"] and self.v6.hunk_string_only(mod, h))]
-            if not live:
-                continue
-            mt = self._mod_tests.get(mod, set())
-            if len(mt) <= self.MODULE_FLOOR_MAX:
-                sel |= mt
+            if kind == "del" or path is None:
+                return all_ids
+            # fix 6: rename/mode/binary of tracked files -> run-all (parse_diff9
+            # flags it, but double-check paths not under the known roots)
+            if not path.startswith(("sqlglot/", "sqlglotc/", "tests/", "docs/")) and \
+                    not path.endswith((".md", ".rst", ".txt", ".yml", ".yaml", ".toml",
+                                      ".cfg", ".ini", ".json", ".lock", ".in", ".gitignore")):
+                return all_ids
+            if path.startswith("sqlglotc/"):
+                # fix 5: any change under sqlglotc/ selects the reader tests
+                sel |= self._read_tests(path)
+            if path.startswith("sqlglot/") and path.endswith(".py"):
+                mod = path[:-3].replace("/", ".")
+                live = [h for h in hunks
+                        if not self.v6.hunk_comment_only(h)
+                        and not (mod in MAPS6["docspans"] and self.v6.hunk_string_only(mod, h))]
+                live = [h for h in live if not comment_hunk_live9(mod, h) or True]
+                if live:
+                    # fix 5: source-reading tests
+                    sel |= self._read_tests(path)
+                    # module floor (v8 behavior)
+                    mt = self._mod_tests.get(mod, set())
+                    if len(mt) <= self.MODULE_FLOOR_MAX:
+                        sel |= mt
+                # fix 5 for typing: those files are read as TEXT, so even a
+                # comment/docstring-only change alters what the reader sees
+                if path.startswith("sqlglot/typing/"):
+                    sel |= self._read_tests(path)
+            if path.startswith("tests/") and path.endswith(".py"):
+                # fix 4: editing a test file selects its transitive importers
+                for importer in TEST_CLOSURE.get(path, ()):
+                    sel |= file_tests.get(importer, set())
+                # a non-test helper file under tests/ (e.g. helpers.py) also
+                # selects its importers; test files themselves handled above
+                if not re.search(r"(^|/)test_\w+\.py$", path) and path not in (
+                        "tests/conftest.py", "tests/__init__.py", "tests/leakcheck.py",
+                        "tests/dialects/__init__.py"):
+                    for importer in TEST_CLOSURE.get(path, ()):
+                        sel |= file_tests.get(importer, set())
         return sel
+
+    def _read_tests(self, path):
+        return set(READ_MAP.get(path, ()))
 
 
 def split_optimal(nums, durations):

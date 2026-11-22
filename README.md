@@ -1,82 +1,92 @@
-# Blast Radius selector v8 — union engine + module floor
+# Blast Radius selector v9 — six patch-logic fixes over the v8 union
 
-One file, pure stdlib. `select = V3Engine.select ∪ V6Engine.select ∪ floor`,
-each engine running on its own embedded maps (gzip+base85 blob).
+One file, pure stdlib. `select = V3Engine ∪ V6Engine ∪ module floor` (v8), plus
+six fixes in the shared patch→location layer that both engines now use. Maps
+are precomputed from the pinned sqlglot commit only (see `build/`); gzip+base85
+blobs decoded once at import.
 
-## Why this shape (board evidence)
+## What v9 fixes over v8
 
-| submission | hidden simulated | misses | total |
-| --- | --- | --- | --- |
-| v3 | 1023.5 s | 2 | 1624.3 |
-| v7 (v3 ∪ v6) | 1026.7 s | 2 | 1626.7 |
+**F1 comment-only hunks are no longer zero-risk.** A `#`/blank add inside a
+multi-line string literal is a live code change (44 non-docstring spans in
+`sqlglot/dialects/dialect.py`, 14 in `sqlglot/generators/duckdb.py`, 1 in
+`sqlglot/lineage.py` — plus f-strings, via the `strspans` map). Other
+comment-only hunks select the enclosing function/class tests, or the module
+floor (≤60 tests); attribution-orphan scopes get a bounded dialect-file floor.
+Cost on the sample kit: +28.2s simulated on 4 comment-only commits (bap8
++23.5s) — this exceeds the 2% guideline and is the mandated "at least the
+enclosing scope" behavior; a narrower version would leave the task's required
+shapes uncovered.
 
-v7's selection is a superset of v3's on every input, yet it missed the same
-2 commits: the hidden failing tests are outside BOTH engines' tiers. A
-red-team campaign (below) tried to reproduce those misses with 13 runtime
-mutations of zero-attribution functions plus structural probes of every
-shared code path — all 100+ resulting failures were covered. The 2 misses
-are therefore attribution orphans or environment-dependent shapes that no
-static tier links; the response is cheap insurance floors, not more rules.
+**F2 `hunk_string_only` inspects added lines too.** A hunk is skippable only
+when every deleted line sits strictly inside a docstring/noop span (never on a
+quote line) AND every added line is pure string text (no triple quote, which
+would terminate the literal early). Docstring-del + code-add is now live.
 
-## What v8 adds over v7
+**F3 true insertion anchors.** `+` runs carry the old-file slot they occupy:
+`old_start + context-before-run` (deleted lines don't advance it; empty old
+range `@@ -N,0` means after line N). Both pure-add and mixed hunks localize by
+these slots. Verified against 7 git-generated hunk conventions.
 
-**Module floor (F1):** for every touched sqlglot module that has live
-(non-comment, non-docstring) hunks and a small attributed test set (≤ 60
-tests), union in that module's complete test set. This protects against
-attribution orphans in leaf modules (a function the pinned-run trace never
-attributed to a test, in a module too small for the importers closure to
-guarantee coverage). Measured cost: +0.1% of simulated seconds.
+**F4 test-file import closure.** Editing a test file selects its transitive
+test-file importers (`tests/dialects/test_dialect.py` → 33 dialect files,
+`tests/helpers.py` → 42). Built by parsing imports under `tests/` at the
+pinned commit.
 
-Floors considered and rejected (measured on the labeled sets):
+**F5 source-reading tests.** A static scan of the pinned tests maps the paths
+they read as text (`pkgutil`+`__code__` in `tests/test_typing.py` over
+`sqlglot/typing/*`, `runpy` in `tests/test_sqlglotc.py` over `sqlglotc/*`) to
+their test ids; any live change on those paths unions those tests in.
 
-- **Fixture floor** (pad fixture commits to the whole test file): +152%
-  simulated seconds — the fixture map is exact, so the pad buys nothing.
-- **Monster insurance** (always run the 2 slowest never-failed tests):
-  +125% — and the board disproves the theory: v3 subtracted exactly those
-  monsters on broad selections and did not gain misses relative to v7.
+**F6 rename/mode/binary headers.** `parse_diff9` parses `rename from/to`,
+`old/new mode`, `new/deleted file mode`, `Binary files differ`; any of these
+on a tracked file → run-all.
 
-## Validation (real full-suite pytest labels + official kit scorer)
+## Validation
 
-| set | commits | misses | simulated |
-| --- | --- | --- | --- |
-| kit sample (official scorer) | 30 | 0 | 303.9 s |
-| adversarial synthetic mutants | 44 | 0 | 629.2 s |
-| real post-pinned commits, code-only (official scorer) | 46 | 0 | 1036.8 s |
+| set | commits | v8 misses | v9 misses | v8 → v9 simulated |
+| --- | --- | --- | --- | --- |
+| kit sample (official scorer) | 30 | 0 | 0 | 309.9 → 339.0 s (+9.4%) |
+| adversarial synthetic mutants | 44 | 0 | 0 | 629.2 → 636.1 s (+1.1%) |
+| real post-pinned commits, code-only | 46 | 0 | 0 | 1038.8 → 1059.5 s (+2.0%) |
+| real post-pinned commits, all | 46 labeled | 0 | 0 | — |
 
-Superset checks: v8 ⊇ v7 on 120/120 labeled commits (and ⊇ v3, ⊇ v6 through
-v7). Runtime ~2.2 s per 46-commit batch, stdout 175 KB < 2 MB, single
-5.95 MB file < 20 MB repo limit.
+Shape probes (15/15 pass): in-string `#` adds in dialect/duckdb value AND noop
+spans select live sets; docstring-del+code and closing-quote replacement are
+live; pure-add localizes to the true function; `test_dialect.py` edit selects
+1,020 tests across all 34 dialect files; `sqlglot/typing/hive.py` edit selects
+`test_typing`; `generators/hive.py` edit selects the 9 `test_time` tests;
+rename/mode/binary fall back to run-all; 2,410 category-(a) mutations classify
+correctly (every in-string insert live, every out-string comment ≥1 test via
+scope or orphan floor).
 
-## Red-team campaign summary (what was tried and eliminated)
+The +9.4% sample delta decomposes as: +23.5s bap8, +2.8s 986c, +1.3s f4xa,
++0.6s 9u5k — all four are the comment-only commits the task requires covering
+(F1). Everything else in the sample is within +0.0s. The codeonly +2.0% is
+two commits whose pure-add class insertions are now correctly localized
+(v8 mislocated them 62-test narrow; the same shape with a breaking edit would
+be a v8 miss).
 
-- **Doctest blind spot** — `tests/test_docs.py` runs module doctests, but it
-  is not in `tests.json`, so docstring-only changes cannot be misses.
-- **Fixture map holes** — cross-checked all 63 fixture files against every
-  `load_sql_fixtures`/`load_sql_fixture_pairs` call site (including the
-  f-string loop in `test_optimizer.py`): the map matches exactly.
-- **Diff parser edges** — renames, mode changes, binary, new files, no-newline
-  markers, CRLF, wrong hunk counts: all either run-all or correctly parsed.
-- **Zero-attribution functions** — 262 functions have no attributed tests;
-  mutating 13 of the most suspicious (executor helpers, dialect builders,
-  `Dialect.transpile`) produced 26 failing tests across 4 mutations, every
-  one covered by the module/importers tiers. The remaining 40 zero-test
-  base `*_sql` generator methods are genuinely dead (8 mutations: 1621/1621
-  tests still pass).
-- **Dict-dispatch indirection** — all 88 `_build_*` parser builders are
-  attributed despite dict registration; method-name dispatch (`*_sql`) is
-  attributed too.
+Runtime: 1.6s CPU for 30 commits, 2.9s for 57, 4.7s for 210 (limit 180s).
+Stdout 184 KB at 210 commits (limit 2 MB). Single 5.96 MB file.
 
-## Maps (derived only from the pinned sqlglot commit — allowed)
+## Reproducibility (`build/`)
 
-Per-test coverage (module/function/statement → tests), AST symbols,
-importers, dialect map, attr readers, name usage, docspans, callsites,
-callgraph, fixtures, keywords, pool coverage. No hidden-set information.
+Every embedded map is derived only from the pinned sqlglot commit
+`eb11aec4be8cb2122afe713a4816662c3f0fb2fa`:
 
-## Run
+- `build_all.sh` — clone/checkout the pin, run every builder, package selector.py
+- `build_maps.py` — AST symbols, imports/importers, dialect map, fixtures
+- `run_coverage.sh` + `build_coverage_maps.py` — per-test coverage of the pinned suite
+- `build_callgraph.py`, `build_attr_readers.py`, `build_callsites.py`,
+  `build_stmt_spans.py`, `build_keyword_map2.py` — engine tiers
+- `build_v9_maps.py` — string spans (tokenize/ast, 3 classes), test import
+  closure, source-reader map
+- `build_selector_v3.py` / `build_selector_v5.py` — engine blobs
+- `build_v9_stage{1,2,3}.py` + `fix_v9_one_pass.py` — the six fixes, applied
+  textually to the v8 source, deterministic and re-runnable from v8
+- `gen_mutfix.py`, `label_patches.sh`, `check_mutfix_a.py`,
+  `verify_v9_shapes.py`, `regress_v9.py` — the mutation harness and checks
 
-```
-docker build -t blast-radius-v8 .
-docker run --rm -v /data:/data blast-radius-v8     # one JSON line per commit
-```
-
-Locally: `python selector.py <dir with tests.json and commits/>`.
+There is no lookup from patch content to tests anywhere; no hidden-set data
+enters any map. The image build copies one file and finishes in seconds.
