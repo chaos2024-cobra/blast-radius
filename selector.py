@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Blast Radius selector v7 — union of the v3 and v6 engines.
+"""Blast Radius selector v8 — union of the v3 and v6 engines + module floor.
 
 Board evidence (hidden practice set): v3 1624.3 total (1023.5 s simulated, 2 misses),
 v4 1792 (3 misses), v5 1907 (5 misses) — every recall cut made the score worse.
@@ -56858,14 +56858,39 @@ def main():
 
 
 class Selector:
-    """Union selector: superset of the v3 and v6 board submissions."""
+    """Union selector: superset of the v3 and v6 board submissions, plus a
+    module floor. For every touched sqlglot module that has live (non-comment,
+    non-docstring) hunks and a small attributed test set (<= 60 tests), the
+    whole module's tests are unioned in: insurance against attribution orphans
+    in leaf modules. Measured cost: +0.1% simulated seconds on the labeled sets."""
+
+    MODULE_FLOOR_MAX = 60
 
     def __init__(self):
         self.v3 = V3Engine()
         self.v6 = V6Engine()
+        self._mod_tests = {
+            k: {TEST_IDS6[i] for i in v} for k, v in MAPS6["module_tests"].items()
+        }
 
     def select(self, patch_text, tests_meta):
-        return self.v3.select(patch_text, tests_meta) | self.v6.select(patch_text, tests_meta)
+        sel = self.v3.select(patch_text, tests_meta) | self.v6.select(patch_text, tests_meta)
+        files = self.v6.parse_diff(patch_text)
+        if not files:
+            return set(t["id"] for t in tests_meta)
+        for (kind, path), hunks in files.items():
+            if not path.startswith("sqlglot/") or not path.endswith(".py"):
+                continue
+            mod = path[:-3].replace("/", ".")
+            live = [h for h in hunks
+                    if not self.v6.hunk_comment_only(h)
+                    and not (mod in MAPS6["docspans"] and self.v6.hunk_string_only(mod, h))]
+            if not live:
+                continue
+            mt = self._mod_tests.get(mod, set())
+            if len(mt) <= self.MODULE_FLOOR_MAX:
+                sel |= mt
+        return sel
 
 
 def split_optimal(nums, durations):
